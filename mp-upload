@@ -1,0 +1,34 @@
+#!/bin/bash
+
+if [ $# -ne 1 ]; then
+    echo "Incorrect number of arguments passed."
+    exit 1
+fi
+
+if [ ! -d $1 ]; then
+    echo "'$1' is no a valid directory."
+    exit 1
+fi
+
+pyboardPath="$1/pyboard"
+if [ ! -d $pyboardPath ]; then
+    echo "'$pyboardPath' is not a valid directory."
+    exit 1
+fi
+    
+
+prescript="$1/pre-script.py"
+echo $prescript
+if [ -f $prescript ]; then
+    echo "Running pre script."
+    python $prescript
+    echo "Finished running pre script."
+else
+    echo "No pre script found."
+fi
+
+
+# run pre script in directory
+rshell rm -r /pyboard/*
+rshell cp -r $1/pyboard/* /pyboard
+rshell repl \~ "exec(open('/main.py').read())"

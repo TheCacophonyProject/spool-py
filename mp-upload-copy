@@ -1,0 +1,139 @@
+#!/bin/bash
+
+# Initialize variables
+arch=""
+logging=""
+
+# Parse options
+while [[ $# -gt 0 ]]; do
+    # If it doesn't start with '--', break the loop
+    if [[ "$1" != "--"* ]]; then
+        break
+    fi
+
+    # Check for each recognized option
+    if [[ "$1" == "--arm64" ]]; then
+        arch="arm64"
+        echo "Using arm64"
+    elif [[ "$1" == "--arm" ]]; then
+        arch="arm"
+        echo "Using arm"
+    elif [[ "$1" == "--x64" ]]; then
+        arch="x64"
+        echo "Using x64"
+    elif [[ "$1" == "--logging" ]]; then
+        shift
+        # Check if logging argument is provided
+        if [[ -z "$1" ]]; then
+            echo "Error: --logging requires an argument"
+            exit 1
+        fi
+        logging="$1"
+        echo "Using logging: $logging"
+    else
+        echo "Error: Unrecognized option '$1'"
+        exit 1
+    fi
+    shift
+done
+
+# Check if a file/directory argument is provided
+if [[ $# -ne 1 ]]; then
+    echo "Incorrect number of arguments passed."
+    echo "Usage: mp-upload [options] directory"
+    echo "Options:"
+    echo "  --arm64          Use arm64 architecture"
+    echo "  --arm            Use arm architecture"
+    echo "  --x64            Use x64 architecture"
+    echo "  --logging <arg>  Enable logging with specified argument"
+    exit 1
+fi
+
+# Assign the file/directory argument
+FILE="$1"
+
+echo "File: $FILE"
+
+
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --*)
+            # Extract option name without the leading '--'
+            OPTION="${1#--}"
+            # Check if the option is valid
+            if [[ " ${VALID_OPTIONS[@]} " =~ " ${OPTION} " ]]; then
+                OPTIONS+=("$OPTION")
+            else
+                echo "Error: Unrecognized option '$1'"
+                usage
+            fi
+            shift
+            ;;
+        *)
+            # Assume any non-option argument is the file
+            if [[ -z "$FILE" ]]; then
+                FILE="$1"
+            else
+                echo "Error: Multiple files specified"
+                usage
+            fi
+            shift
+            ;;
+    esac
+done
+
+
+
+
+
+
+if [ $# -gt 2 ]; then
+    echo "Incorrect number of arguments passed. Usage: mp-upload [options] directory"
+    echo "Options:"
+    echo "  -s, --skip-pre-script: Skip running the pre script."
+    exit 1
+fi
+
+if [ ! -d $1 ]; then
+    echo "'$1' is not a valid directory."
+    exit 1
+fi
+
+pyboardPath="$1/pyboard"
+if [ ! -d $pyboardPath ]; then
+    echo "'$pyboardPath' is not a valid directory."
+    exit 1
+fi
+
+prescript="$1/pre-script.py"
+if [ -f $prescript ]; then
+    echo "Running pre script."
+    python $prescript
+    echo "Finished running pre script."
+else
+    echo "No pre script found."
+fi
+
+# File to store the timestamp of the last upload
+timestampFile=".last_upload_timestamp"
+currentTimestamp=$(date +%s)
+
+if [ -f $timestampFile ]; then
+    lastUploadTimestamp=$(cat $timestampFile)
+else
+    # If the file does not exist, assume the last upload was a long time ago.
+    lastUploadTimestamp=0
+fi
+
+# Find changed files since the last upload and copy them to the pyboard
+find $pyboardPath -type f -newermt "@$lastUploadTimestamp" | while IFS= read -r file; do
+    destination="/pyboard/${file#$pyboardPath/}"
+    echo "Copying changed file: $file -> $destination"
+    rshell cp "$file" "$destination"
+done
+
+# Update the timestamp of the last upload
+echo $currentTimestamp > $timestampFile
+
+rshell repl \~ "exec(open('/main.py').read())"
