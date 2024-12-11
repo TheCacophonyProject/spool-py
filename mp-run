@@ -1,0 +1,41 @@
+#!/bin/bash
+
+# Check if an argument is provided
+if [ "$#" -ne 1 ]; then
+    echo "Usage: $0 <python_file>"
+    exit 1
+fi
+
+# Take the first argument and ensure it is a Python file
+PYTHON_FILE=$1
+
+if [[ ! $PYTHON_FILE == *.py ]]; then
+    echo "Error: The file must be a Python (.py) file."
+    exit 1
+fi
+
+if [[ ! -f $PYTHON_FILE ]]; then
+    echo "Error: File $PYTHON_FILE does not exist."
+    exit 1
+fi
+
+# Extract the base file name
+BASE_FILE_NAME=$(basename "$PYTHON_FILE")
+
+# Copy the file to the board
+echo "Copying $PYTHON_FILE to the board..."
+rshell cp "$PYTHON_FILE" "/pyboard/$BASE_FILE_NAME"
+if [ $? -ne 0 ]; then
+    echo "Error: Failed to copy file to the board."
+    exit 1
+fi
+
+# Run the file on the board
+echo "Running $BASE_FILE_NAME on the board..."
+rshell repl ~ "exec(open('/$BASE_FILE_NAME').read())"
+if [ $? -ne 0 ]; then
+    echo "Error: Failed to execute the file on the board."
+    exit 1
+fi
+
+echo "Script execution completed."

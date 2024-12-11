@@ -1,34 +1,39 @@
 #!/bin/bash
 
-if [ $# -ne 1 ]; then
-    echo "Incorrect number of arguments passed."
+# Check the number of arguments
+if [ $# -lt 1 ] || [ $# -gt 2 ]; then
+    echo "Usage: $0 <directory> [script_to_run]"
     exit 1
 fi
 
-if [ ! -d $1 ]; then
-    echo "'$1' is no a valid directory."
+# Validate the first parameter as a directory
+if [ ! -d "$1" ]; then
+    echo "'$1' is not a valid directory."
     exit 1
 fi
 
+# Define variables
 pyboardPath="$1/pyboard"
-if [ ! -d $pyboardPath ]; then
+if [ ! -d "$pyboardPath" ]; then
     echo "'$pyboardPath' is not a valid directory."
     exit 1
 fi
-    
 
+# Check for the optional second parameter (script to run)
+scriptToRun=${2:-main.py} # Default to main.py if not provided
+
+# Check for pre-script and execute if present
 prescript="$1/pre-script.py"
 echo $prescript
-if [ -f $prescript ]; then
+if [ -f "$prescript" ]; then
     echo "Running pre script."
-    python $prescript
+    python "$prescript"
     echo "Finished running pre script."
 else
     echo "No pre script found."
 fi
 
-
-# run pre script in directory
+# Copy files to the pyboard and execute the specified script
 rshell rm -r /pyboard/*
-rshell cp -r $1/pyboard/* /pyboard
-rshell repl \~ "exec(open('/main.py').read())"
+rshell cp -r "$pyboardPath"/* /pyboard
+rshell repl \~ "exec(open('/$scriptToRun').read())"

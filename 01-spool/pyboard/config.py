@@ -37,6 +37,24 @@ PIN_PHOTO_INTERRUPTER_TRIGGER = 14
 PIN_PHOTO_INTERRUPTER_RESET = 19
 
 
+HOME_ANGLE_OFFSET = 20
+RESET_ANGLE_OFFSET = 201
+
+"""
+Got to reset position
+196.6992
+Moving to home position.
+Got to reset position, reverse direction to get home
+Got to home position
+31.37695
+Moving to trigger position.
+Got to trigger position
+51.41602
+Moving to home position.
+Got to home position
+38.75977
+"""
+
 
 # Servo positions. Values in microseconds for servo motors.
 #SERVO_HOME = 2250*1000

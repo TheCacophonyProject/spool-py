@@ -12,7 +12,7 @@ while True:
     start_time = time.time() # Get start time in seconds
     
     print("Moving to reset")
-    spool.move_to_reset()
+    spool.reset_sequence()
     time.sleep(2)
     
     print("Moving to home position.")
