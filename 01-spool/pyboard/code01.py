@@ -1,15 +1,20 @@
 # Program 1 will run the trap triggering from the PIRs. Can be set to only trigger at night.
+
+# TODO Make it only trigger at night.
+# TODO Testing
+
 import time
 from util import Spool, PIRs
 
+trigger_window = TriggerWindow()
+
 spool = Spool()
 pirs = PIRs()
+clock = Clock()
 
 while True:
-    start_time = time.time() # Get start time in seconds
-    
-    print("Moving to reset")
-    spool.move_to_reset()
+    print("Resetting")
+    spool.reset_sequence()
     time.sleep(2)
     
     print("Moving to home position.")
@@ -19,16 +24,11 @@ while True:
     print("Waiting for PIRs to detect motion.")
     while pirs.read() == 0:
         pass
-    print("PIRs Detected motion.")
-
-    print("Moving to trigger position.")
+    
     spool.move_to_trigger()
+    print("Motion detected.")
     time.sleep(2)
 
     print("Moving to home position.")
     spool.move_to_home()
     time.sleep(2)
-
-    #elapsed_time = time.time() - start_time
-    #if elapsed_time < 60:
-    #    time.sleep(60 - elapsed_time)

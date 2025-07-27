@@ -3,7 +3,7 @@
 # The encoder can be moved from position 0 for the lowest sensitivity to position 9 for the highest.
 # If setting the sensitivity by the encoder you need to make the PIR switch is set to software not manual.
 
-from util import PIRs
+from util import PIRs, Buzzer
 import time
 import as5600
 
@@ -11,13 +11,16 @@ pirs = PIRs()
 buzzer = Buzzer()
 
 while True:
-    if pirs.read() == 0:
-        #print("No motion detected.")
-        buzzer.off()
+    pir1 = pirs.pir_1.value()
+    pir2 = pirs.pir_2.value()
+    if pir1 and pir2:
+        buzzer.pwm(1800, 50)
+    elif pir1:
+        buzzer.pwm(800, 20)
+    elif pir2:
+        buzzer.pwm(1200, 20)
     else:
-        #print("Motion detected.")
-        buzzer.on()
+        buzzer.off()
     
-    #print(pir.read_sensitivity())
     time.sleep(0.02)
 

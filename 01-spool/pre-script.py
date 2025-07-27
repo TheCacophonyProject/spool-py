@@ -1,7 +1,7 @@
 import os
 from datetime import datetime
 
-filename = os.path.join(os.path.dirname(__file__), "pyboard/uploadtime.py" )
+filename = os.path.join(os.path.dirname(__file__), "pyboard/upload_time.py" )
 now = datetime.utcnow()
 with open(filename, "w") as file:
     file.write(f"seconds = {now.second}\n")

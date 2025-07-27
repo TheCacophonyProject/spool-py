@@ -44,18 +44,25 @@ class Spool:
     def find_angle(self):
         print("Finding angle...")
         self.move_to_trigger()
+        time.sleep(1)
         angle = self._as5600.get_degrees()
         self.trigger_angle = angle
-        self.home_angle = 16
-        self.reset_angle = 214
+        self.home_angle = (30.6+26.3)/2
+        self.reset_angle = 232
         self.set_angle_zero()
+        
         time.sleep(1)
 
+
+    def _angle_0_360(self):
+        return (-1*self._as5600.get_degrees()+360)%360
+
     def set_angle_zero(self):
-        self.angle_offset = -1 * self._as5600.get_degrees() - 10
-    
+        self.angle_offset = self._angle_0_360() - 8
+
     def get_angle(self):
-        return (-1*(self._as5600.get_degrees() + self.angle_offset)+360)%360
+        # Normalize to 0–360 range
+        return (-1*self._as5600.get_degrees() - self.angle_offset) % 360
 
     def stop(self):
         self.h_in1.duty_u16(65536)
@@ -88,42 +95,46 @@ class Spool:
         self.direction = "ccw"
 
     def at_home(self):
-        return self.photo_interrupter_home.value() == 0
+        return self.photo_interrupter_home.value() == 1
 
     def at_reset(self):
-        return self.photo_interrupter_reset.value() == 0
+        return self.photo_interrupter_reset.value() == 1
 
     def at_trigger(self):
-        return self.photo_interrupter_trigger.value() == 0
+        return self.photo_interrupter_trigger.value() == 1
 
     def move_to_reset(self):
+        print("Moving to reset")
         self._drive_ccw()
         while not self.at_reset():
             continue
         self.stop()
-        print("Got to reset position")
-        print(self.get_angle())
+        print("Got to reset position, ", self.get_angle())
 
     def move_to_trigger(self):
+        print("Moving to trigger")
         self._drive_cw()
         while not self.at_trigger():
             continue
         self.stop()
-        print("Got to trigger position")
-        print(self.get_angle())
+        print("Got to trigger position", self.get_angle())
+        print()
 
     def move_to_angle(self, angle):
         print("Moving to angle", angle)
+        print("starting at angle", self.get_angle())
         if angle > self.get_angle():
             self._drive_ccw()
             while angle >= self.get_angle():
+                #print(self.get_angle())
                 continue
         else:
             self._drive_cw()
             while angle <= self.get_angle():
+                #print(self.get_angle())
                 continue
         self.stop()
-        print("Got to angle", angle)
+        print("Got to angle", angle, self.get_angle())
 
     def reset_sequence(self, steps=4):
         print("Running reset sequence =================")
@@ -146,6 +157,7 @@ class Spool:
         print("Finished reset sequence =================")
 
     def move_to_home(self):
+        print("Moving to home")
         if self.home_angle is None:
             self.find_angle()
 
@@ -210,10 +222,10 @@ class Buzzer:
         self.off()
 
     def on(self):
-        self.pwm(100, 100)
+        self.pwm(1000, 50)
 
     def off(self):
-        self.pwm(100, 0)
+        self.pwm(1000, 0)
 
     def pwm(self, freq, duty):
         self.pwm_instance.freq(freq)
@@ -242,6 +254,24 @@ class Buzzer:
             if not loop:
                 break
 
+
+class RotaryEncoder:
+    def __init__(self):
+        self.pin_1 = Pin(PIN_ROT_ENC_1, Pin.IN, Pin.PULL_UP)
+        self.pin_2 = Pin(PIN_ROT_ENC_2, Pin.IN, Pin.PULL_UP)
+        self.pin_4 = Pin(PIN_ROT_ENC_4, Pin.IN, Pin.PULL_UP)
+        self.pin_8 = Pin(PIN_ROT_ENC_8, Pin.IN, Pin.PULL_UP)
+
+    def position(self):
+        return 15 - self.pin_1.value() - 2*self.pin_2.value() - 4*self.pin_4.value() - 8*self.pin_8.value()
+
+class TriggerWindow:
+    def __init__(self):
+        self.pin = Pin(PIN_SW_TRIGGER_WINDOW, Pin.IN, Pin.PULL_UP)
+        self.i2c = i2c
+
+    def _is_night(self):
+        return True ## TODO
 
 class Clock:
     def __init__(self):
@@ -517,4 +547,6 @@ class Trap:
             sleep(1 / steps_per_second)
 
         spool.duty_ns(angle_duty_end)
+
+
 

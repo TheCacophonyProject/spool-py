@@ -3,35 +3,42 @@ from time import sleep
 import pcf8563
 import os
 import datetime
-from util import Buzzer, Clock
+from util import Buzzer, Clock, RotaryEncoder
 from config import *
 
 buzzer = Buzzer()
 clock = Clock()
+rotary_encoder = RotaryEncoder()
 
 rc1 = Pin(PIN_ROT_ENC_1, Pin.IN, Pin.PULL_UP)
 rc2 = Pin(PIN_ROT_ENC_2, Pin.IN, Pin.PULL_UP)
 rc4 = Pin(PIN_ROT_ENC_4, Pin.IN, Pin.PULL_UP)
 rc8 = Pin(PIN_ROT_ENC_8, Pin.IN, Pin.PULL_UP)
 
-uploadtimeFile = "uploadtime.py"
+upload_time_file = "upload_time.py"
 
 try:
-    os.stat(uploadtimeFile)
+    os.stat(upload_time_file)
     first_run = True
 except OSError:
     first_run = False
 
-
-# Don't use the RTC for now
+# Set to false to skip using the RTC
 if True:
     if first_run:
-        import uploadtime
-        print(uploadtime)
-        clock.write_time(seconds=uploadtime.seconds, minutes=uploadtime.minutes, hours=uploadtime.hours, day=uploadtime.day_of_week, date=uploadtime.date, month=uploadtime.month, year=uploadtime.year)
-        os.remove(uploadtimeFile)
+        import upload_time
+        print(upload_time)
+        clock.write_time(
+            seconds=upload_time.seconds, 
+            minutes=upload_time.minutes, 
+            hours=upload_time.hours, 
+            day=upload_time.day_of_week, 
+            date=upload_time.date, 
+            month=upload_time.month, 
+            year=upload_time.year
+        )
+        os.remove(upload_time_file)
         print("updated the RTC time.")
-
 
     if clock.check_low_voltage() != 0:
         buzzer.beep_error(ERROR_TIME_NOT_SET, loop=True)
@@ -40,8 +47,8 @@ if True:
     print("RTC time is (UTC): " + str(clock.get_utc_time()))
     print("Local time is :    " + str(clock.get_local_time()))
 
-# Calculate position on rotary switch
-n = 15 - rc1.value() - 2*rc2.value() - 4*rc4.value() - 8*rc8.value()
+n = rotary_encoder.position()
+print("At position " + str(n))
 
 sleep(1)
 for i in range(3):

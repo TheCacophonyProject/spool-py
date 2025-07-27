@@ -1,12 +1,12 @@
-# Program 8 will run through a reset, home, trigger, home cycle every minutes.
+# Program 8 will run through a reset, home, trigger, home cycle.
 
 import time
 from util import Spool
 
 spool = Spool()
 
-# Initialize the spool. This will drive around to trigger position
-#spool.init()
+# It will go through the loop every `loop_time_seconds` amount of seconds. So 120 means 30 loops a hour
+loop_time_seconds = 120
 
 while True:
     start_time = time.time() # Get start time in seconds
@@ -28,5 +28,5 @@ while True:
     time.sleep(2)
 
     elapsed_time = time.time() - start_time
-    if elapsed_time < 60:
-        time.sleep(60 - elapsed_time)
+    if elapsed_time < loop_time_seconds:
+        time.sleep(loop_time_seconds - elapsed_time)
