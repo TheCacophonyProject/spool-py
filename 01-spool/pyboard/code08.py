@@ -11,12 +11,8 @@ loop_time_seconds = 120
 while True:
     start_time = time.time() # Get start time in seconds
     
-    print("Moving to reset")
+    print("Resetting")
     spool.reset_sequence()
-    time.sleep(2)
-    
-    print("Moving to home position.")
-    spool.move_to_home()
     time.sleep(2)
     
     print("Moving to trigger position.")
@@ -24,9 +20,13 @@ while True:
     time.sleep(2)
 
     print("Moving to home position.")
-    spool.move_to_home()
+    spool.move_to_home("ccw")
     time.sleep(2)
 
     elapsed_time = time.time() - start_time
     if elapsed_time < loop_time_seconds:
-        time.sleep(loop_time_seconds - elapsed_time)
+        sleep_duration = loop_time_seconds - elapsed_time
+        print(f"Sleeping for {sleep_duration} seconds")
+        time.sleep(sleep_duration)
+    else:
+        print("Complete loop in " + str(elapsed_time) + " seconds.")

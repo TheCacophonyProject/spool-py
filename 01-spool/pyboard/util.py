@@ -14,9 +14,6 @@ i2c = I2C(id=0, scl=Pin(PIN_SCL), sda=Pin(PIN_SDA))
 
 class Spool:
     def __init__(self):  # , as5600):
-        # Magnet position sensor
-        self._as5600 = AS5600(i2c)
-
         # H-Bridge driver pins
         self.h_in1 = PWM(Pin(PIN_H_IN_1), freq=20000)
         self.h_in1.duty_u16(0)
@@ -34,35 +31,16 @@ class Spool:
 
         # Power up photointerrupters
         self.en_photo_interrupter.value(1)
-        self.angle_offset = 0
-        self.find_angle()
+        #self.angle_offset = 0
+        #self.find_angle()
+
+        self.home_to_reset_duration = 10
 
         # TODO
         # Setup timers for stopping motor 
-        
-
-    def find_angle(self):
-        print("Finding angle...")
-        self.move_to_trigger()
-        time.sleep(1)
-        angle = self._as5600.get_degrees()
-        self.trigger_angle = angle
-        self.home_angle = (30.6+26.3)/2
-        self.reset_angle = 232
-        self.set_angle_zero()
-        
-        time.sleep(1)
-
-
-    def _angle_0_360(self):
-        return (-1*self._as5600.get_degrees()+360)%360
 
     def set_angle_zero(self):
         self.angle_offset = self._angle_0_360() - 8
-
-    def get_angle(self):
-        # Normalize to 0–360 range
-        return (-1*self._as5600.get_degrees() - self.angle_offset) % 360
 
     def stop(self):
         self.h_in1.duty_u16(65536)
@@ -70,6 +48,7 @@ class Spool:
         self.speed = 0
         self.direction = "stop"
 
+    # _drive_cw is towards trigger
     def _drive_cw(self, speed=100):
         if self.at_trigger():
             self.stop()
@@ -82,6 +61,7 @@ class Spool:
         self.speed = speed
         self.direction = "cw"
 
+    # _drive_ccw is towards reset
     def _drive_ccw(self, speed=100):
         if self.at_reset():
             self.stop()
@@ -109,7 +89,7 @@ class Spool:
         while not self.at_reset():
             continue
         self.stop()
-        print("Got to reset position, ", self.get_angle())
+        print("Got to reset position, ")
 
     def move_to_trigger(self):
         print("Moving to trigger")
@@ -117,7 +97,7 @@ class Spool:
         while not self.at_trigger():
             continue
         self.stop()
-        print("Got to trigger position", self.get_angle())
+        print("Got to trigger position")
         print()
 
     def move_to_angle(self, angle):
@@ -138,6 +118,34 @@ class Spool:
 
     def reset_sequence(self, steps=4):
         print("Running reset sequence =================")
+        self.stop()
+        time.sleep(0.2)
+        self.move_to_home("cw")
+        time.sleep(1)
+
+        step_size = self.home_to_reset_duration/steps
+        steps = steps -1 # -1 because we always do the last step (to reset)
+        for i in range(steps):
+            sleep_duration = step_size*(i+1)
+            self._drive_ccw() # Towards reset
+            time.sleep(sleep_duration)
+            self.stop()
+            time.sleep(0.5)
+            self.move_to_home("cw")
+            time.sleep(0.5)
+            
+        # TODO, put a time limit on this as to not burn out the motor if it takes too long
+        start_time = time.time()
+        self.move_to_reset()
+        self.home_to_reset_duration = time.time() - start_time  # Update how long it takes to move from home to reset
+        print("home_to_reset_duration", self.home_to_reset_duration)
+        time.sleep(0.5)
+        self.move_to_home("cw")
+        time.sleep(0.5)
+        print("Finished reset sequence =================")
+
+    def reset_sequence_old(self, steps=4):
+        print("Running reset sequence =================")
         self.move_to_home()
         time.sleep(1)
 
@@ -156,17 +164,22 @@ class Spool:
         time.sleep(1)
         print("Finished reset sequence =================")
 
-    def move_to_home(self):
+    def move_to_home(self, direction):
         print("Moving to home")
-        if self.home_angle is None:
-            self.find_angle()
+        #if self.home_angle is None:
+        #    self.find_angle()
 
-        if self.get_angle() < self.home_angle:
+        #if self.get_angle() < self.home_angle:
+        #    self._drive_ccw()
+        #    ccw = True
+        if direction == "ccw":
             self._drive_ccw()
             ccw = True
-        else:
+        elif direction == "cw":
             self._drive_cw()
             ccw = False
+        else:
+            raise Exception("Invalid direction")
         while not self.at_home():
             if ccw:
                 if self.at_reset():
