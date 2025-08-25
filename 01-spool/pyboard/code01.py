@@ -27,4 +27,6 @@ while True:
 
     print("Moving to home position.")
     spool.move_to_home("ccw")
-    time.sleep(2)
+    
+    print("Waiting 10 minutes until resetting")
+    time.sleep(10*60)
