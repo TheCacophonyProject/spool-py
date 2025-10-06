@@ -16,7 +16,7 @@ clock = Clock()
 
 while True:
     print("Resetting")
-    spool.reset_sequence(steps=1)
+    spool.reset_sequence()
     time.sleep(2)
     
     print("Moving to home position.")
