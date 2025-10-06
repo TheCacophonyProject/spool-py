@@ -9,7 +9,7 @@ clock = Clock()
 
 while True:
     print("Resetting")
-    spool.reset_sequence()
+    spool.reset_sequence(steps=1)
     time.sleep(2)
     
     print("Moving to home position.")
@@ -17,12 +17,31 @@ while True:
     time.sleep(2)
 
     print("Waiting for PIRs to detect motion during the active window.")
-    while not clock.in_active_window() or pirs.read() == 0:
+    old_state = ""
+    while True:
+        # Check the state of the clock and PIRs
+        if clock.in_active_window():
+            if pirs.read() == 0:
+                state = "active, no motion"
+            else:
+                print("active and motion detected")
+                break
+        else:
+            if pirs.read() == 0:
+                state = "inactive, no motion"
+            else:
+                state = "inactive, motion"
+
+        # Only print the state if it has changed
+        if state != old_state:
+            print(state)
+            old_state = state
+
+        # Wait a bit
         time.sleep(0.05)
-        pass
     
+    print("Motion detected, moving to trigger position.")
     spool.move_to_trigger()
-    print("Motion detected.")
     time.sleep(2)
 
     print("Moving to home position.")
