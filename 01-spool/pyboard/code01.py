@@ -13,7 +13,7 @@ while True:
     time.sleep(2)
     
     print("Moving to home position.")
-    spool.move_to_home("cw")
+    spool.move_to_home()
     time.sleep(2)
 
     print("Waiting for PIRs to detect motion during the active window.")
@@ -45,7 +45,7 @@ while True:
     time.sleep(2)
 
     print("Moving to home position.")
-    spool.move_to_home("ccw")
+    spool.move_to_home()
     
     print("Waiting 10 minutes until resetting")
     time.sleep(10*60)

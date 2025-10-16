@@ -20,7 +20,7 @@ while True:
     time.sleep(2)
 
     print("Moving to home position.")
-    spool.move_to_home("ccw")
+    spool.move_to_home()
     time.sleep(2)
 
     elapsed_time = time.time() - start_time

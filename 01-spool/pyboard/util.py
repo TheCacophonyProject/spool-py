@@ -6,11 +6,15 @@ from config import *
 from time import sleep
 import time
 from as5600 import AS5600
+from ina219 import INA219
+
+SHUNT_OHMS = 0.1
 
 i2c = I2C(id=0, scl=Pin(PIN_SCL), sda=Pin(PIN_SDA))
-
-
-
+ina = INA219(SHUNT_OHMS, i2c)
+ina.configure()
+print(ina.current())
+print(ina.voltage())
 
 class Spool:
     def __init__(self):  # , as5600):
@@ -49,7 +53,7 @@ class Spool:
         self.direction = "stop"
 
     # _drive_cw is towards trigger
-    def _drive_cw(self, speed=100):
+    def _drive_cw(self, speed=100, timeout=8):
         if self.at_trigger():
             self.stop()
             return
@@ -83,23 +87,6 @@ class Spool:
     def at_trigger(self):
         return self.photo_interrupter_trigger.value() == 1
 
-    def move_to_reset(self):
-        print("Moving to reset")
-        self._drive_ccw()
-        while not self.at_reset():
-            continue
-        self.stop()
-        print("Got to reset position, ")
-
-    def move_to_trigger(self):
-        print("Moving to trigger")
-        self._drive_cw()
-        while not self.at_trigger():
-            continue
-        self.stop()
-        print("Got to trigger position")
-        print()
-
     def move_to_angle(self, angle):
         print("Moving to angle", angle)
         print("starting at angle", self.get_angle())
@@ -120,18 +107,19 @@ class Spool:
         print("Running reset sequence =================")
         self.stop()
         time.sleep(0.2)
-        self.move_to_home("cw")
+        self.move_to_home()
         time.sleep(1)
 
         step_size = self.home_to_reset_duration/steps
         steps = steps -1 # -1 because we always do the last step (to reset)
         for i in range(steps):
             sleep_duration = step_size*(i+1)
-            self._drive_ccw() # Towards reset
-            time.sleep(sleep_duration)
-            self.stop()
+            self.move_to_reset(timeout=sleep_duration, timeout_error=False)
+            #self._drive_ccw() # Towards reset
+            #time.sleep(sleep_duration)
+            #self.stop()
             time.sleep(0.5)
-            self.move_to_home("cw")
+            self.move_to_home()
             time.sleep(0.5)
             
         # TODO, put a time limit on this as to not burn out the motor if it takes too long
@@ -140,7 +128,7 @@ class Spool:
         self.home_to_reset_duration = time.time() - start_time  # Update how long it takes to move from home to reset
         print("home_to_reset_duration", self.home_to_reset_duration)
         time.sleep(0.5)
-        self.move_to_home("cw")
+        self.move_to_home()
         time.sleep(0.5)
         print("Finished reset sequence =================")
 
@@ -164,7 +152,127 @@ class Spool:
         time.sleep(1)
         print("Finished reset sequence =================")
 
-    def move_to_home(self, direction):
+    # For the movement of the spool we want these drive options.
+    # Move to home (direction, timeout) return true if reaches target
+    # Move to reset (direction, timeout) return true if reaches target
+    # Move to trigger (direction, timeout) return true if reaches target
+
+
+    # This function will try to move the spool to the home position.
+    # Because the spool could be either side of the home position, we will first use the last known 
+    
+    def move_to_reset_old(self):
+        print("Moving to reset")
+        self._drive_ccw()
+        while not self.at_reset():
+            continue
+        self.stop()
+        print("Got to reset position, ")
+
+    def move_to_trigger_old(self):
+        print("Moving to trigger")
+        self._drive_cw()
+        while not self.at_trigger():
+            continue
+        self.stop()
+        print("Got to trigger position")
+        print()
+
+    def move_to_reset(self, timeout=15, timeout_error=True):
+        print("Moving to reset")
+        if self.at_reset():
+            print("Already at reset")
+            return True
+        self._drive_ccw()
+        return self._wait_to_stop_spool(self.at_reset, timeout, timeout_error)
+
+    def move_to_trigger(self, timeout=2, timeout_error=True):
+        print("Moving to trigger")
+        if self.at_trigger():
+            print("Already at trigger")
+            return True
+        self._drive_cw()
+        return self._wait_to_stop_spool(self.at_trigger, timeout, timeout_error)
+
+    
+    def move_to_home(self, timeout=15, timeout_error=True, retries=3):
+        print("Moving to home... ")
+        if self.at_home():
+            print("Already at home")
+            return True
+        if self.at_trigger():
+            # We are at the trigger point so we know what direction to move.
+            self._drive_ccw()
+            return self._wait_to_stop_spool(self.at_home, timeout, timeout_error)
+        if self.at_reset():
+            # We are at the reset point so we know what direction to move.
+            self._drive_cw()
+            return self._wait_to_stop_spool(self.at_home, timeout, timeout_error)
+
+        # We don't know what direction we need to move, so we will move to the trigger direction first
+        # then if we reach trigger, will move to home.
+        self._drive_cw()
+        reached_target = self._wait_to_stop_spool(lambda: self.at_trigger() or self.at_home(), timeout, timeout_error)
+        if not reached_target:
+            return False # we timed out
+        
+        # We reached home, so return true
+        if self.at_home():
+            print("got to home")
+            return True
+
+        if not self.at_trigger():
+            print("at trigger")
+            # We reached trigger, so move to home. But now we know the direction we need to move.
+            self.stop()
+            time.sleep(0.5) # add this little sleep so it doesn't quickly go from one direction to the other.
+            self._drive_ccw()
+            return self._wait_to_stop_spool(self.at_home, timeout, timeout_error)
+
+        # We should never get here.
+        if retries > 0:
+            print("We couldn't find home. Will try again.")
+            time.sleep(1)
+            return self.move_to_home(timeout, timeout_error, retries - 1)
+
+        print("Couldn't find home")
+        buzzer.beep_error(CANNOT_FIND_HOME, loop=True)
+
+    def _abcd(self):
+        return self.at_home() or self.at_trigger()
+
+    def _wait_to_stop_spool(self, checker_function, timeout, error):
+        start_time = time.time()
+        ina.wake()
+        avg = RingAvg(30)
+        while True:
+            # Check if it has got to the target
+            if checker_function():
+                self.stop()
+                print("Finished move. Reason: Got to target")
+                ina.sleep()
+                return True
+
+            # Timeout on moving.
+            if time.time() - start_time > timeout:
+                self.stop()
+                print("Finished move. Reason: Timed out")
+                if error:
+                    buzzer.beep_error(ERROR_MOVEMENT_TIMEOUT, loop=True)
+                ina.sleep()
+                return False
+
+            current = ina.current()
+            print(current)
+            avg.add(abs(current))
+            if avg.avg() > MAX_CURRENT:
+                self.stop()
+                print("Finished move. Reason: Over current")
+                buzzer.beep_error(ERROR_OVER_CURRENT, loop=True)
+                ina.sleep()
+                return False
+
+    def move_to_home_old(self, direction):
         print("Moving to home")
         #if self.home_angle is None:
         #    self.find_angle()
@@ -197,7 +305,7 @@ class Spool:
         self.stop()
         print("Got to home position")
 
-    def move_to_home_old(self):
+    def move_to_home_old_old(self):
         t = time.time()
         self._drive_ccw()
         while True:
@@ -227,6 +335,34 @@ class Spool:
                 print("Got to trigger position, now how did I get here?????")
                 self.stop()
                 return
+
+class RingAvg:
+    def __init__(self, size):
+        assert size > 0
+        self.size = size
+        self.buf = [0.0] * size   # preallocate (use array('f') if you like)
+        self.sum = 0.0
+        self.count = 0            # how many valid samples (<= n)
+        self.idx = 0              # next write index
+
+    def add(self, x):
+        x = float(x)
+        if self.count < self.size:
+            # still filling
+            self.buf[self.idx] = x
+            self.sum += x
+            self.count += 1
+        else:
+            # overwrite oldest
+            old = self.buf[self.idx]
+            self.buf[self.idx] = x
+            self.sum += x - old
+        self.idx += 1
+        if self.idx == self.size:    # faster than % in many ports
+            self.idx = 0
+
+    def avg(self):
+        return self.sum / self.size
 
 
 class Buzzer:
@@ -563,3 +699,4 @@ class Trap:
 
 
 
+buzzer = Buzzer()
