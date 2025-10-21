@@ -390,15 +390,18 @@ class Buzzer:
 
     def beep_error(self, beeps, loop=True):
         while True:
-            self.on()
-            sleep(5)
+            for _ in range(3):
+                self.on()
+                sleep(0.2)
+                self.pwm(800, 50)
+                sleep(0.2)
             self.off()
             sleep(1)
             for i in range(beeps):
                 self.on()
-                sleep(0.1)
+                sleep(0.2)
                 self.off()
-                sleep(0.1)
+                sleep(0.2)
             sleep(1)
             if not loop:
                 break
