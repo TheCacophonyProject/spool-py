@@ -2,6 +2,7 @@ import pcf8563
 import timezone
 import datetime
 from machine import I2C, UART, Pin, PWM, ADC
+import machine
 from config import *
 from time import sleep
 import time
@@ -12,7 +13,7 @@ SHUNT_OHMS = 0.1
 
 i2c = I2C(id=0, scl=Pin(PIN_SCL), sda=Pin(PIN_SDA))
 ina = INA219(SHUNT_OHMS, i2c)
-ina.configure()
+ina.configure(gain = INA219.GAIN_8_320MV)
 print(ina.current())
 print(ina.voltage())
 
@@ -236,7 +237,7 @@ class Spool:
             return self.move_to_home(timeout, timeout_error, retries - 1)
 
         print("Couldn't find home")
-        buzzer.beep_error(CANNOT_FIND_HOME, loop=True)
+        buzzer.beep_error(CANNOT_FIND_HOME)
 
     def _abcd(self):
         return self.at_home() or self.at_trigger()
@@ -258,17 +259,21 @@ class Spool:
                 self.stop()
                 print("Finished move. Reason: Timed out")
                 if error:
-                    buzzer.beep_error(ERROR_MOVEMENT_TIMEOUT, loop=True)
+                    buzzer.beep_error(ERROR_MOVEMENT_TIMEOUT)
                 ina.sleep()
                 return False
-
-            current = ina.current()
-            print(current)
-            avg.add(abs(current))
+            
+            try: 
+                current = ina.current()
+                # print(current)
+                avg.add(abs(current))
+            except Exception as e:
+                print("ina error", e)
             if avg.avg() > MAX_CURRENT:
                 self.stop()
                 print("Finished move. Reason: Over current")
-                buzzer.beep_error(ERROR_OVER_CURRENT, loop=True)
+                # buzzer.beep_error(ERROR_OVER_CURRENT, loop=True)
+                buzzer.beep_error(10)
                 ina.sleep()
                 return False
 
@@ -388,8 +393,8 @@ class Buzzer:
             self.off()
         print("Trap is ready.")
 
-    def beep_error(self, beeps, loop=True):
-        while True:
+    def beep_error(self, beeps):
+        for _ in range(3):
             for _ in range(3):
                 self.on()
                 sleep(0.2)
@@ -403,8 +408,7 @@ class Buzzer:
                 self.off()
                 sleep(0.2)
             sleep(1)
-            if not loop:
-                break
+        machine.reset()
 
 
 class RotaryEncoder:

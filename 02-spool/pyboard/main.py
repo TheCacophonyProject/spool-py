@@ -7,8 +7,10 @@ import datetime
 from util import Buzzer, Clock, RotaryEncoder
 from config import *
 
+i2c = I2C(id=0, scl=Pin(PIN_SCL), sda=Pin(PIN_SDA))
+
 buzzer = Buzzer()
-clock = Clock()
+clock = Clock(i2c)
 rotary_encoder = RotaryEncoder()
 
 rc1 = Pin(PIN_ROT_ENC_1, Pin.IN, Pin.PULL_UP)
