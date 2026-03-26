@@ -4,9 +4,10 @@ from time import sleep
 import pcf8563
 import os
 import datetime
-from util import Buzzer, Clock, RotaryEncoder
+from util import Buzzer, Clock, RotaryEncoder, RPi_UART
 from config import *
 
+uart = RPi_UART(baudrate=9600)
 i2c = I2C(id=0, scl=Pin(PIN_SCL), sda=Pin(PIN_SDA))
 
 buzzer = Buzzer()
@@ -87,12 +88,15 @@ while True:
     try:
         with open(filename) as f:
             print("running " + filename)
+            uart.send({"type": "running", "data": filename})
             exec(f.read())
     except OSError as e:
         print(f"{filename} OS error:", e)
+        uart.send({"type": "error", "data": str(e)})
         buzzer.beep_error(ERROR_NO_PROGRAM_FOUND)
     except Exception as e:
         print("Runtime error:", e)
+        uart.send({"type": "error", "data": str(e)})
         sys.print_exception(e)
         buzzer.beep_error(ERROR_NO_PROGRAM_FOUND)
-
+    time.sleep(10)
