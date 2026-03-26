@@ -1,0 +1,62 @@
+#!/bin/bash
+
+if [ $# -lt 2 ]; then
+    echo "Usage: $0 <directory> <user@host> [script_to_run]"
+    exit 1
+fi
+
+directory="$1"
+remote="$2"
+scriptToRun="${3:-}"
+
+if [ ! -d "$directory" ]; then
+    echo "'$directory' is not a valid directory."
+    exit 1
+fi
+
+pyboardPath="$directory/pyboard"
+if [ ! -d "$pyboardPath" ]; then
+    echo "'$pyboardPath' is not a valid directory."
+    exit 1
+fi
+
+# Run pre-script locally if present
+prescript="$directory/pre-script.py"
+if [ -f "$prescript" ]; then
+    echo "Running pre script..."
+    python "$prescript"
+    echo "Finished running pre script."
+fi
+
+# Kill any existing mpremote process on the remote host
+echo "Killing any existing mpremote process on $remote..."
+ssh "$remote" "pkill -f mpremote || true"
+
+# SCP the directory to the remote host
+remoteTmpDir="/tmp/mp-upload-$(basename "$directory")"
+ssh "$remote" "rm -rf '$remoteTmpDir'"
+echo "Copying '$directory' to $remote:$remoteTmpDir..."
+scp -r "$directory" "$remote:$remoteTmpDir"
+if [ $? -ne 0 ]; then
+    echo "Failed to copy files to $remote."
+    exit 1
+fi
+
+remotePyboardPath="$remoteTmpDir/pyboard"
+
+echo "Copying files to Pico..."
+ssh "$remote" "mpremote cp '$remotePyboardPath/'* :"
+if [ $? -ne 0 ]; then
+    echo "Failed to copy files to Pico."
+    exit 1
+fi
+
+if [ -n "$scriptToRun" ]; then
+    echo "Running $scriptToRun on Pico..."
+    ssh "$remote" "mpremote run '$remotePyboardPath/$scriptToRun'"
+else
+    echo "Resetting Pico..."
+    ssh "$remote" "mpremote reset"
+fi
+
+echo "Done."
