@@ -1,3 +1,4 @@
+import ujson
 import pcf8563
 import timezone
 import datetime
@@ -147,12 +148,16 @@ class Spool:
         start_time = time.time()
         self.ina219.wake()
         avg = RingAvg(30)
+        max_avg_current = 0
+        max_current = 0
         while True:
             # Check if it has got to the target
             if checker_function():
                 self.stop()
                 print("Finished move. Reason: Got to target")
                 self.ina219.sleep()
+                print("Max current ", max_current)
+                print("Max average current ", max_avg_current)
                 return True
 
             # Timeout on moving.
@@ -166,14 +171,19 @@ class Spool:
             
             try:
                 current = self.ina219.current()
+                if current > max_current:
+                    max_current = current
                 avg.add(abs(current))
+                avg_current = avg.avg()
+                if avg_current > max_avg_current:
+                    max_avg_current = avg_current
             except Exception as e:
                 print("ina error", e)
             if avg.avg() > MAX_CURRENT:
                 self.stop()
                 print("Finished move. Reason: Over current")
                 # TODO, work out how we will handle this case
-                self.buzzer.beep_error(ERROR_OVER_CURRENT, loop=False)
+                self.buzzer.beep_error(ERROR_OVER_CURRENT)
                 self.ina219.sleep()
                 return False
 
@@ -325,16 +335,13 @@ class PIRs:
         self.i2c.writeto(0x3E, bytes([0, value]))
 
 class RPi_UART:
-    def __init__(self):
-        self.uart = UART(0, baudrate=9600, tx=Pin(PIN_UART_TX), rx=Pin(PIN_UART_RX))
+    def __init__(self, baudrate=9600):
+        self.uart = UART(0, baudrate=baudrate, tx=Pin(PIN_UART_TX), rx=Pin(PIN_UART_RX))
 
     def check_for_message(self):
-        # Check to see if there is any data in the UART buffer, if not return None
         if not self.uart.any():
             return None
-        
-        # There is some data so lets read the full line.
-        # TODO: Timeout of reading the whole line
+
         line = bytearray()
         while True:
             if self.uart.any():
@@ -342,7 +349,7 @@ class RPi_UART:
                 if char == b"\n":
                     break
                 line.extend(char)
-        
+        print("Received: ", line)
         data = line.decode('utf-8')
         
         # Check that we get the message in the correct format "<message|checksum>"
@@ -369,25 +376,25 @@ class RPi_UART:
     def send(self, data):
         json_str = ujson.dumps(data)
         checksum = self._compute_checksum(json_str.encode())
-        uart.write('<{}|{}>'.format(json_str, checksum))  
+        self.uart.write('<{}|{}>\n'.format(json_str, checksum))
 
     def _compute_checksum(self, message):
         return sum(message) % 256
 
     def send_nack(self, message_id=0):
         self.send({
-            "id": id,
+            "id": message_id,
             "response": True,
             "type": "NACK",
             "data": ""
         })
-    
-    def send_ack(self, message_id=0):
+
+    def send_ack(self, message_id=0, data=""):
         self.send({
-            "id": id,
+            "id": message_id,
             "response": True,
             "type": "ACK",
-            "data": ""
+            "data": data
         })
 
 class Request():
