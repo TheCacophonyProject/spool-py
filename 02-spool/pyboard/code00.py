@@ -6,16 +6,13 @@ import time
 i2c = I2C(id=0, scl=Pin(PIN_SCL), sda=Pin(PIN_SDA))
 
 pirs = PIRs(i2c)
-uart = RPi_UART()
+uart = RPi_UART(baudrate=9600)
 spool = Spool(i2c)
 
-# State of the trap. Use "read" and "write" to access.
-state = {
-    "trap_active": False # If the trap is active or not, will it trigger with motion detected or not.
+# variables that can be read/set using "read" and "write"
+vars = {
+    "enabled": False # If the trap is active or not, will it trigger with motion detected or not.
 }
-
-# Commands that can be triggered. Will return the result of the command.
-
 
 # These are the command handlers, they should return a tuple of (data, success). 
 # The data should be in the format of a JSON.
@@ -23,23 +20,24 @@ state = {
 
 def reset_spool(data):
     spool.reset_sequence()
-    return True
+    return "", True
 
 def trigger_spool(data):
     if not spool.at_home():
         spool.move_to_home()
     spool.release()
-    return True
+    return "", True
 
 def read_pirs(data):
-    return pirs.read()
+    return pirs.read(), True
 
 def read_spool(data):
-    return spool.read()
+    return spool.read(), True
 
 def set_time(data):
-    return True
+    return "", True
 
+# Commands that can be triggered. Will return the result of the command.
 commands = {
     "reset_spool": reset_spool,
     "trigger_spool": trigger_spool,
@@ -48,10 +46,14 @@ commands = {
     "set_time": set_time,
 }
 
+print("Waiting for commandss...")
+
+uart.send({"type": "ping"})
+
 while True:
     request = uart.check_for_message()
     if request is not None:
-        
+        print(request)
         # Handle "command" requests.
         if request.type == "command":
             command = request.data.get('command')
@@ -62,5 +64,20 @@ while True:
                     uart.send_ack(request.id, data)
                 else:
                     uart.send_nack(request.id)
+            else:
+                uart.send_nack(request.id)
 
-    time.sleep(0.02)
+        elif request.type == "read":
+            var = request.data.get('var')
+            if var in vars:
+                uart.send_ack(request.id, str(vars[var]))
+            else:
+                uart.send_nack(request.id)
+
+        elif request.type == "write":
+            var = request.data.get('var')
+            if var in vars:
+                vars[var] = request.data.get('val')
+                uart.send_ack(request.id)
+            else:
+                uart.send_nack(request.id)

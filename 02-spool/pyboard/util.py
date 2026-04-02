@@ -14,7 +14,8 @@ MAX_U16 = 65535
 
 
 class Spool:
-    def __init__(self, i2c):
+    def __init__(self, i2c, uart=None):
+        self.uart = uart
         # H-Bridge driver pins, set frequency and set to 0
         self.h_in1 = PWM(Pin(PIN_H_IN_1), freq=20000)
         self.h_in1.duty_u16(0)
@@ -41,6 +42,10 @@ class Spool:
 
         # Buzzer
         self.buzzer = Buzzer()
+
+    def _send(self, msg_type, data=""):
+        if self.uart is not None:
+            self.uart.send({"type": msg_type, "data": data})
 
     def stop(self):
         # Writing both values to high will set the motor driver into "break/stop" mode.
@@ -87,6 +92,7 @@ class Spool:
 
     def reset_sequence(self, steps=4):
         print("======== Running reset sequence ========")
+        self._send("spoolStatus", "resetting")
         # Stop and then move to home to start the reset sequence.
         self.stop()
         time.sleep(0.2)
@@ -114,10 +120,12 @@ class Spool:
         self.move_to_home()
         time.sleep(0.5)
         print("Finished reset sequence =================")
+        self._send("spoolStatus", "reset")
 
 
     def move_to_reset(self, timeout=15, timeout_error=True):
         print("Moving to reset")
+        self._send("spoolStatus", "movingToReset")
         if self.at_reset():
             print("Already at reset")
             return True
@@ -126,6 +134,7 @@ class Spool:
     
     def move_to_home(self, timeout=15, timeout_error=True):
         print("Moving to home")
+        self._send("spoolStatus", "movingToHome")
         if self.at_home():
             print("Already at home")
             return True
@@ -135,9 +144,11 @@ class Spool:
     def release(self):
         # It is only safe to trigger the trap if the spool has made it back to the home position.
         if not self.at_home():
+            self._send("spoolStatus", "releaseFailedNotAtHome")
             return False
-        
+
         # At home position so it is safe to release the trap.
+        self._send("spoolStatus", "releasing")
         self.electromagnet_en_pin.on()
         time.sleep(0.5)
         self.electromagnet_en_pin.off()
