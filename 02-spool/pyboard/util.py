@@ -175,9 +175,11 @@ class Spool:
             if time.time() - start_time > timeout:
                 self.stop()
                 print("Finished move. Reason: Timed out")
+                self.ina219.sleep()
+                print("Max current ", max_current)
+                print("Max average current ", max_avg_current)
                 if error_on_timeout:
                     self.buzzer.beep_error(ERROR_MOVEMENT_TIMEOUT)
-                self.ina219.sleep()
                 return False
             
             try:

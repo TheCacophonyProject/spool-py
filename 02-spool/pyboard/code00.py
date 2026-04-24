@@ -46,6 +46,8 @@ commands = {
     "set_time": set_time,
 }
 
+# raise RuntimeError("test error for error logging")
+
 print("Waiting for commandss...")
 
 uart.send({"type": "ping"})

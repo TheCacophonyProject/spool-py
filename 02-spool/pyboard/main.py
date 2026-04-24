@@ -84,19 +84,53 @@ filename = "/code{:02d}.py".format(n)
 
 import sys
 
+import io
+
+def save_error(err):
+    try:
+        # Check if there is enough space to save the error
+        stat = os.statvfs("/")
+        free_bytes = stat[0] * stat[3]
+        print("Free bytes: " + str(free_bytes))
+        if free_bytes < 10_000_000:
+            print("Not enough space to save error.log")
+            return
+        
+        # Save the error with the timestamp
+        buf = io.StringIO()
+        sys.print_exception(err, buf)
+        timestamp = str(clock.get_utc_time())
+        with open("error.log", "a") as f:
+            f.write("--- " + timestamp + " ---\n")
+            f.write(buf.getvalue())
+            f.write("\n")
+        print("Error saved to error.log")
+
+    except Exception:
+        print("Error when trying to save to error.log")
+
 while True:
+
+    # Check if the program file exists.
+    try:
+        os.stat(filename)
+    except OSError:
+        print(filename + " not found")
+        uart.send({"type": "error", "data": filename + " not found"})
+        buzzer.beep_error(ERROR_NO_PROGRAM_FOUND)
+        sleep(10)
+        continue
+
+    # Run the program.
     try:
         with open(filename) as f:
             print("running " + filename)
             uart.send({"type": "running", "data": filename})
             exec(f.read())
-    except OSError as e:
-        print(f"{filename} OS error:", e)
-        uart.send({"type": "error", "data": str(e)})
-        buzzer.beep_error(ERROR_NO_PROGRAM_FOUND)
     except Exception as e:
         print("Runtime error:", e)
         uart.send({"type": "error", "data": str(e)})
         sys.print_exception(e)
-        buzzer.beep_error(ERROR_NO_PROGRAM_FOUND)
-    time.sleep(10)
+        save_error(e)
+        buzzer.beep_error(ERROR_RUNTIME_ERROR)
+    sleep(10)
