@@ -1,0 +1,51 @@
+#!/bin/bash
+
+run_main=false
+
+# Parse arguments
+args=()
+for arg in "$@"; do
+    case "$arg" in
+        --run-main) run_main=true ;;
+        *) args+=("$arg") ;;
+    esac
+done
+
+if [ "${#args[@]}" -ne 1 ]; then
+    echo "Usage: $0 <directory> [--run-main]"
+    exit 1
+fi
+
+directory="${args[0]}"
+
+if [ ! -d "$directory" ]; then
+    echo "'$directory' is not a valid directory."
+    exit 1
+fi
+
+srcPath="$directory/src"
+if [ ! -d "$srcPath" ]; then
+    echo "'$srcPath' is not a valid directory."
+    exit 1
+fi
+
+prescript="$directory/pre-script.py"
+if [ -f "$prescript" ]; then
+    echo "Running pre script."
+    python "$prescript"
+    echo "Finished running pre script."
+fi
+
+echo "Clearing Pico filesystem..."
+mpremote exec "import os; [os.remove(f) for f in os.listdir() if not os.stat(f)[0] & 0x4000]"
+
+echo "Copying files from $srcPath..."
+mpremote cp "$srcPath"/* :
+
+if [ "$run_main" = true ]; then
+    echo "Running main.py..."
+    mpremote run "$srcPath/main.py"
+else
+    echo "Resetting Pico..."
+    mpremote reset
+fi

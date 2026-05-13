@@ -1,0 +1,51 @@
+#!/bin/bash
+
+skip_update=false
+
+# Parse arguments
+args=()
+for arg in "$@"; do
+    case "$arg" in
+        --skip-update) skip_update=true ;;
+        *) args+=("$arg") ;;
+    esac
+done
+
+if [ "${#args[@]}" -ne 1 ]; then
+    echo "Usage: $0 <target-file> [--skip-update]"
+    exit 1
+fi
+
+targetFile="${args[0]}"
+
+if [ ! -f "$targetFile" ]; then
+    echo "'$targetFile' is not a valid file."
+    exit 1
+fi
+
+if [[ ! "$targetFile" == *.py ]]; then
+    echo "Error: The file must be a Python (.py) file."
+    exit 1
+fi
+
+if [ "$skip_update" = false ]; then
+    # Derive the directory from the file path (expects <directory>/src/<file.py>)
+    srcPath=$(dirname "$targetFile")
+    directory=$(dirname "$srcPath")
+
+    prescript="$directory/pre-script.py"
+    if [ -f "$prescript" ]; then
+        echo "Running pre script."
+        python "$prescript"
+        echo "Finished running pre script."
+    fi
+
+    echo "Clearing Pico filesystem..."
+    mpremote exec "import os; [os.remove(f) for f in os.listdir() if not os.stat(f)[0] & 0x4000]"
+
+    echo "Copying files from $srcPath..."
+    mpremote cp "$srcPath"/* :
+fi
+
+echo "Running $targetFile..."
+mpremote run "$targetFile"
