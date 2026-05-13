@@ -4,20 +4,25 @@
 # TODO Testing 
 
 import time
-from util import Spool, PIRs, Trap
+from util import *
 from machine import Pin
 
 rx_pin = Pin(29, Pin.IN, Pin.PULL_DOWN)
 
-spool = Spool()
-pirs = PIRs()
-clock = Clock()
+i2c = I2C(id=0, scl=Pin(PIN_SCL), sda=Pin(PIN_SDA))
+
+spool = Spool(i2c)
+pirs = PIRs(i2c)
+clock = Clock(i2c)
+buzzer = Buzzer()
 
 while True:
     print("Resetting")
     spool.reset_sequence()
     time.sleep(2)
     
+    buzzer.beep_trap_ready()
+
     print("Moving to home position.")
     spool.move_to_home()
     time.sleep(2)
