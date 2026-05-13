@@ -2,34 +2,22 @@
 
 run_main=false
 
-# Parse arguments
-args=()
 for arg in "$@"; do
     case "$arg" in
         --run-main) run_main=true ;;
-        *) args+=("$arg") ;;
+        *) echo "Unknown argument: $arg"; exit 1 ;;
     esac
 done
 
-if [ "${#args[@]}" -ne 1 ]; then
-    echo "Usage: $0 <directory> [--run-main]"
-    exit 1
-fi
+scriptDir="$(cd "$(dirname "$0")" && pwd)"
+srcPath="$scriptDir/src"
 
-directory="${args[0]}"
-
-if [ ! -d "$directory" ]; then
-    echo "'$directory' is not a valid directory."
-    exit 1
-fi
-
-srcPath="$directory/src"
 if [ ! -d "$srcPath" ]; then
     echo "'$srcPath' is not a valid directory."
     exit 1
 fi
 
-prescript="$directory/pre-script.py"
+prescript="$scriptDir/pre-script.py"
 if [ -f "$prescript" ]; then
     echo "Running pre script."
     python "$prescript"

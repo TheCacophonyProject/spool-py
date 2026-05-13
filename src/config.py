@@ -35,23 +35,26 @@ PIN_ELECTROMAGNET_RELEASE = 18
 PIN_UART_TX = 28
 PIN_UART_RX = 29
 
-# Position (Used for day and night calculations)
-LATITUDE = -43.532055
-LONGITUDE = 172.636230
+# INA219 shunt resistor resistance in Ω
+SHUNT_OHMS = 0.1
 
 # Error codes
 ERROR_TIME_NOT_SET = 3
 ERROR_NO_PROGRAM_FOUND = 4
 ERROR_MOVEMENT_TIMEOUT = 5
-ERROR_OVER_CURRENT = 6
-ERROR_RUNTIME_ERROR = 7
+CANNOT_FIND_HOME = 6
+ERROR_OVER_CURRENT = 7
 
-# Guess as to how long it takes to get from home to reset
+# Indicator LEDs
+PIN_LED_1 = 7   # PIR trigger
+PIN_LED_2 = 8   # thermal trigger
+
 # This is used so when resetting the first time it knows how long each "step" should be.
-HOME_TO_RESET_DURATION = 14
-
-# INA219 shunt resistor resistance in Ω
-SHUNT_OHMS = 0.1
+HOME_TO_RESET_DURATION = 10
 
 # Mas current in mA
-MAX_CURRENT = 1300
+MAX_CURRENT = 1600
+
+# Position (Used for day and night calculations)
+LATITUDE = -43.532055
+LONGITUDE = 172.636230

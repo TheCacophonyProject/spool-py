@@ -1,21 +1,17 @@
-import ujson
 import pcf8563
 import timezone
 import datetime
-from machine import I2C, UART, Pin, PWM, ADC
-import machine
+from machine import I2C, UART, Pin, PWM, reset
 from config import *
-from time import sleep
+from user_config import *
 import time
-from as5600 import AS5600
 from ina219 import INA219
 
 MAX_U16 = 65535
 
 
 class Spool:
-    def __init__(self, i2c, uart=None):
-        self.uart = uart
+    def __init__(self, i2c):
         # H-Bridge driver pins, set frequency and set to 0
         self.h_in1 = PWM(Pin(PIN_H_IN_1), freq=20000)
         self.h_in1.duty_u16(0)
@@ -42,10 +38,6 @@ class Spool:
 
         # Buzzer
         self.buzzer = Buzzer()
-
-    def _send(self, msg_type, data=""):
-        if self.uart is not None:
-            self.uart.send({"type": msg_type, "data": data})
 
     def stop(self):
         # Writing both values to high will set the motor driver into "break/stop" mode.
@@ -92,7 +84,6 @@ class Spool:
 
     def reset_sequence(self, steps=4):
         print("======== Running reset sequence ========")
-        self._send("spoolStatus", "resetting")
         # Stop and then move to home to start the reset sequence.
         self.stop()
         time.sleep(0.2)
@@ -120,12 +111,10 @@ class Spool:
         self.move_to_home()
         time.sleep(0.5)
         print("Finished reset sequence =================")
-        self._send("spoolStatus", "reset")
 
 
     def move_to_reset(self, timeout=15, timeout_error=True):
         print("Moving to reset")
-        self._send("spoolStatus", "movingToReset")
         if self.at_reset():
             print("Already at reset")
             return True
@@ -134,7 +123,6 @@ class Spool:
     
     def move_to_home(self, timeout=15, timeout_error=True):
         print("Moving to home")
-        self._send("spoolStatus", "movingToHome")
         if self.at_home():
             print("Already at home")
             return True
@@ -144,11 +132,9 @@ class Spool:
     def release(self):
         # It is only safe to trigger the trap if the spool has made it back to the home position.
         if not self.at_home():
-            self._send("spoolStatus", "releaseFailedNotAtHome")
             return False
-
+        
         # At home position so it is safe to release the trap.
-        self._send("spoolStatus", "releasing")
         self.electromagnet_en_pin.on()
         time.sleep(0.5)
         self.electromagnet_en_pin.off()
@@ -175,11 +161,9 @@ class Spool:
             if time.time() - start_time > timeout:
                 self.stop()
                 print("Finished move. Reason: Timed out")
-                self.ina219.sleep()
-                print("Max current ", max_current)
-                print("Max average current ", max_avg_current)
                 if error_on_timeout:
                     self.buzzer.beep_error(ERROR_MOVEMENT_TIMEOUT)
+                self.ina219.sleep()
                 return False
             
             try:
@@ -245,9 +229,9 @@ class Buzzer:
 
     def beep_trap_ready(self):
         for i in range(5):
-            sleep(0.5)
+            time.sleep(0.5)
             self.on()
-            sleep(0.5)
+            time.sleep(0.5)
             self.off()
         print("Trap is ready.")
 
@@ -255,18 +239,18 @@ class Buzzer:
         for _ in range(3):
             for _ in range(3):
                 self.on()
-                sleep(0.2)
+                time.sleep(0.2)
                 self.pwm(800, 50)
-                sleep(0.2)
+                time.sleep(0.2)
             self.off()
-            sleep(1)
+            time.sleep(1)
             for i in range(beeps):
                 self.on()
-                sleep(0.2)
+                time.sleep(0.2)
                 self.off()
-                sleep(0.2)
-            sleep(1)
-        machine.reset()
+                time.sleep(0.2)
+            time.sleep(1)
+        reset()
 
 class RotaryEncoder:
     def __init__(self):
@@ -348,13 +332,16 @@ class PIRs:
         self.i2c.writeto(0x3E, bytes([0, value]))
 
 class RPi_UART:
-    def __init__(self, baudrate=9600):
-        self.uart = UART(0, baudrate=baudrate, tx=Pin(PIN_UART_TX), rx=Pin(PIN_UART_RX))
+    def __init__(self):
+        self.uart = UART(0, baudrate=9600, tx=Pin(PIN_UART_TX), rx=Pin(PIN_UART_RX))
 
     def check_for_message(self):
+        # Check to see if there is any data in the UART buffer, if not return None
         if not self.uart.any():
             return None
-
+        
+        # There is some data so lets read the full line.
+        # TODO: Timeout of reading the whole line
         line = bytearray()
         while True:
             if self.uart.any():
@@ -362,7 +349,7 @@ class RPi_UART:
                 if char == b"\n":
                     break
                 line.extend(char)
-        print("Received: ", line)
+        
         data = line.decode('utf-8')
         
         # Check that we get the message in the correct format "<message|checksum>"
@@ -389,25 +376,25 @@ class RPi_UART:
     def send(self, data):
         json_str = ujson.dumps(data)
         checksum = self._compute_checksum(json_str.encode())
-        self.uart.write('<{}|{}>\n'.format(json_str, checksum))
+        uart.write('<{}|{}>'.format(json_str, checksum))  
 
     def _compute_checksum(self, message):
         return sum(message) % 256
 
     def send_nack(self, message_id=0):
         self.send({
-            "id": message_id,
+            "id": id,
             "response": True,
             "type": "NACK",
             "data": ""
         })
-
-    def send_ack(self, message_id=0, data=""):
+    
+    def send_ack(self, message_id=0):
         self.send({
-            "id": message_id,
+            "id": id,
             "response": True,
             "type": "ACK",
-            "data": data
+            "data": ""
         })
 
 class Request():

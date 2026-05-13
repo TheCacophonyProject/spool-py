@@ -2,7 +2,6 @@
 
 skip_update=false
 
-# Parse arguments
 args=()
 for arg in "$@"; do
     case "$arg" in
@@ -12,7 +11,7 @@ for arg in "$@"; do
 done
 
 if [ "${#args[@]}" -ne 1 ]; then
-    echo "Usage: $0 <target-file> [--skip-update]"
+    echo "Usage: $0 <file> [--skip-update]"
     exit 1
 fi
 
@@ -29,11 +28,10 @@ if [[ ! "$targetFile" == *.py ]]; then
 fi
 
 if [ "$skip_update" = false ]; then
-    # Derive the directory from the file path (expects <directory>/src/<file.py>)
-    srcPath=$(dirname "$targetFile")
-    directory=$(dirname "$srcPath")
+    scriptDir="$(cd "$(dirname "$0")" && pwd)"
+    srcPath="$scriptDir/src"
 
-    prescript="$directory/pre-script.py"
+    prescript="$scriptDir/pre-script.py"
     if [ -f "$prescript" ]; then
         echo "Running pre script."
         python "$prescript"

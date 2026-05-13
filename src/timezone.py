@@ -84,26 +84,3 @@ class timezone:
     def get_local_time(this, utc_time):
         tz = this.get_current_tz(utc_time)
         return utc_time + datetime.timedelta(minutes=tz.timezone)
-
-
-
-
-
-"""
-print("======EXAMPLES======")
-latitude = -43.532055
-longitude = 172.636230
-dst = time_change_rule(-1, 6, 9, 2, 780)
-st = time_change_rule(0, 6, 4, 2, 720)
-nz_tz = timezone(dst, st)
-now = datetime.datetime(2022, 4, 3, 13, 1) # Now in UTC
-
-print(_DAYS_BEFORE_MONTH)
-
-print("UTC:    ", now)
-tz = nz_tz.get_current_tz(now).timezone
-print("TZ:     ", tz/60)
-print("local:  ", nz_tz.get_local_time(now))
-print("Sunrise:", get_sunrise(now, latitude, longitude, tz))
-print("Sunset: ", get_sunset(now, latitude, longitude, tz))
-"""
