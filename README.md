@@ -21,22 +21,25 @@ Program 0 is a special case where from program 0 it can run any other program an
 
 ### Program 0
 
-With the rotary dial to 0 when the trap powers on it will try to connect to the camera over UART. If it fails to do so after 10 seconds it will run the default program.
+With the rotary dial to 0 when the trap powers on it will try to connect to the camera over UART. If it fails to do so after 10 seconds it will run the default program set in the configuration.
 
-If the trap does connect to the camera the camera can send commands over UART changing.
+If the trap does connect to the camera the camera can send commands over UART changing:
 
 - [ ] Default program to run. This can be helpful so traps can be configured to run different programs without needing to open them up.
-- [ ] Update time. The RTC on the trap will slowly drift so the camera can update the time.
+- [ ] Update time. The RTC on the trap will slowly drift so the camera can update the time on the RTC.
 - [ ] Camera can read logs from trap. The trap can make some minimal logs for tracking when the trap was triggered and such.
 - [ ] Collect error logs.
 - [ ] Update software. The camera can send new files over UART for the trap to run.
 - [ ] Read list of files and the hash. This is so the camera can check that the trap has the correct files on it.
 - [ ] Update trap configuration.
+- [ ] Trigger resets/triggers of the trap.
+- [ ] Read state of sensors on the trap.
 
 ### Program 1
 
 Program 1 is a basic PIR triggered trap.
 It can be configured to only trigger at night or day and night.
+Can connect to the camera through UART to notify when the trap triggered.
 
 ### Program 2
 
@@ -52,19 +55,6 @@ The camera can:
 - [ ] Enable/Disable through UART.
 - [ ] Update the time of the RTC.
 
+### Program 8
 
-Set `PROGRAM` in `config.py` to select which program runs on boot via `main.py`.
-
-
-
-| Program | File | Description |
-| ------- | ---- | ----------- |
-| 0 | `code00.py` | Debugging — listens for commands over UART (reset spool, trigger spool, read PIRs, read spool). |
-| 1 | `code01.py` | PIR-triggered trap with a time-based active window from the RTC clock. |
-| 2 | `code02.py` | PIR-triggered trap enabled/disabled by a high signal on the Rx pin. |
-| 3 | `code03.py` | Same as program 2 but the enable signal is active-low. |
-| 4 | `code04.py` | PIR or thermal (MLX90640) triggered trap with a time-based active window. Set `TRIGGER_SOURCE` in `config.py` to `"pir"` or `"thermal"`. |
-| 5 | `code05.py` | LED indicator test — no spool triggering. `led1` lights on PIR motion, `led2` lights on thermal motion. Prints frame stats. |
-| 6 | `code06.py` | MLX90640 SNR measurement tool. Collects a quiet baseline then prints per-frame signal-to-noise stats to help tune `MLX_THRESHOLD`. |
-| 7 | `code07.py` | PIR audio test — buzzer plays different tones depending on which PIRs are active. |
-| 8 | `code08.py` | Spool cycle test — repeatedly runs reset → release → home on a configurable interval. |
+Program 8 is a test program, will communicate with the trap over UART for logging purposes.

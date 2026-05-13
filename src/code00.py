@@ -1,13 +1,30 @@
-# Program 0 is used for debugging
-
 from util import *
 import time
 
-i2c = I2C(id=0, scl=Pin(PIN_SCL), sda=Pin(PIN_SDA))
+# // TODO: Change how the message is formatted so it is more concise. Something like: <ID|Type|Payload>CRC
+# //   - ID is a uint16
+# //   - Type is a string (ACK, NACK, Read, writeConfig, Command, Response...)
+# //   - Payload is as many bytes as needed
+# //   - CRC is 2 byte checksum
+   
+# TODO: These are the different types of messages that can be sent and how they will be processed.
+#       - ACK - Acknowledges a message
+#       - NACK - Denies a message
+#       - writeConfig - Payload is a json file of the configuration.
+#       - deleteFile - Payload is the file to be deleted.
+#       - writeLines - Payload is a JSON with {file: "filename", lines: ["line1", "line2", ...]}
+#       - writeRTC - Payload is a JSON with the new time {year: 2023, month: 1, day: 1, hour: 0, minute: 0, second: 0}
+#       - readRTC - Returns the current time as a JSON
+#       - ls - Returns a JSON with all the files on the trap and there hashes.
+#       - readFile - Payload is a JSON with {file: "filename", lineOffset: 0, lineCount: 10} Response is the lines of the file, including the lineIndex of the last line read.
+#       - sensors - Returns a JSON with all the sensors and there values.
+#       - spoolRelease - Triggers the spools to release.
+#       - spoolReset - Runs the spool reset sequence.
+#       - spoolState - Returns the state of the spool.
 
-pirs = PIRs(i2c)
+pirs = PIRs()
 uart = RPi_UART()
-spool = Spool(i2c)
+spool = Spool()
 
 # State of the trap. Use "read" and "write" to access.
 state = {

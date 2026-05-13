@@ -9,9 +9,10 @@ from ina219 import INA219
 
 MAX_U16 = 65535
 
+i2c = I2C(id=0, scl=Pin(PIN_SCL), sda=Pin(PIN_SDA))
 
 class Spool:
-    def __init__(self, i2c):
+    def __init__(self, i2c=i2c):
         # H-Bridge driver pins, set frequency and set to 0
         self.h_in1 = PWM(Pin(PIN_H_IN_1), freq=20000)
         self.h_in1.duty_u16(0)
@@ -263,7 +264,7 @@ class RotaryEncoder:
         return 15 - self.pin_1.value() - 2*self.pin_2.value() - 4*self.pin_4.value() - 8*self.pin_8.value()
 
 class Clock:
-    def __init__(self, i2c):
+    def __init__(self, i2c=i2c):
         self.r = pcf8563.PCF8563(i2c)
         self.latitude = LATITUDE
         self.longitude = LONGITUDE
@@ -309,7 +310,7 @@ class Clock:
         return self.r.check_low_voltage()
 
 class PIRs:
-    def __init__(self, i2c):
+    def __init__(self, i2c=i2c):
         self.i2c = i2c
         self.pir_1 = Pin(PIN_PIR_1, Pin.IN)
         self.pir_2 = Pin(PIN_PIR_2, Pin.IN)
@@ -374,9 +375,10 @@ class RPi_UART:
         return Request(message_json)
 
     def send(self, data):
-        json_str = ujson.dumps(data)
-        checksum = self._compute_checksum(json_str.encode())
-        uart.write('<{}|{}>'.format(json_str, checksum))  
+        responseStr = "1" if data['response'] else "0"
+        d = f"<{data['id']}|{responseStr}|{data['payload']}>"
+        checksum = self._compute_checksum(d)
+        uart.write('{}{}'.format(json_str, checksum))
 
     def _compute_checksum(self, message):
         return sum(message) % 256
@@ -386,7 +388,7 @@ class RPi_UART:
             "id": id,
             "response": True,
             "type": "NACK",
-            "data": ""
+            "payload": ""
         })
     
     def send_ack(self, message_id=0):
@@ -394,7 +396,7 @@ class RPi_UART:
             "id": id,
             "response": True,
             "type": "ACK",
-            "data": ""
+            "payload": ""
         })
 
 class Request():
