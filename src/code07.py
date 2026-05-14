@@ -1,0 +1,33 @@
+# Program 7 will run the trap triggering from the Analog PIRs. Can be set to only trigger at night.
+
+import time
+from util import Spool, APIR, Clock
+from machine import Pin
+
+spool = Spool()
+apir = APIR()
+clock = Clock()
+
+# Green LED
+led1 = Pin(8, Pin.OUT)
+led1.low()
+
+# Blue LED
+led2 = Pin(7, Pin.OUT)
+led2.low()
+
+led1_off_time = 0
+led2_off_time = 0
+
+while True:
+    # print("======")
+    apir.update()
+    now = time.time()
+
+    if apir.displacement_triggered:
+        led1_off_time = now + 1
+    led1.high() if now < led1_off_time else led1.low()
+
+    if apir.gradient_triggered:
+        led2_off_time = now + 1
+    led2.high() if now < led2_off_time else led2.low()

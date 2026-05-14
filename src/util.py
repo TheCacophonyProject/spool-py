@@ -1,7 +1,7 @@
 import pcf8563
 import timezone
 import datetime
-from machine import I2C, UART, Pin, PWM, reset
+from machine import I2C, UART, Pin, PWM, ADC, reset
 from config import *
 from user_config import *
 import time
@@ -433,3 +433,41 @@ class Request():
             return
 
         send_response(nack_message(self.id))
+
+class APIR():
+    def __init__(self):
+        self.AnalogPin = ADC(27)
+        self.min = 0
+        self.max = 43_000
+        self.avg = (self.min + self.max)/2
+        self.displacement_threshold = (self.max - self.min)/2*APIR_DISPLACEMENT_THRESHOLD # 50%
+        self.gradient_threshold = APIR_GRADIENT_THRESHOLD # 600
+        self.previous_value = self.AnalogPin.read_u16()
+        self.last_time = time.time_ns()
+        self.displacement_triggered = False
+        self.gradient_triggered = False
+
+    def update(self):
+        # Prevent updating too frequently, 0.5ms
+        if time.time_ns() - self.last_time < 1_000_000:
+            return
+
+        new_value = self.AnalogPin.read_u16()
+        # print(new_value)
+        new_time = time.time_ns()
+
+        # Check if the new value meets the displacement threshold
+        displacement = abs(new_value - self.avg)
+        self.displacement_triggered = displacement > self.displacement_threshold
+        # print(displacement)
+        # print(self.displacement_triggered)
+
+        # Check if the new value meets the gradient threshold
+        gradient = abs((new_value - self.previous_value) / (new_time - self.last_time) * 1_000_000)
+        self.gradient_triggered = gradient > self.gradient_threshold
+        # print(gradient)
+        # print(self.gradient_triggered)
+
+        self.previous_value = new_value
+        self.last_time = new_time
+  

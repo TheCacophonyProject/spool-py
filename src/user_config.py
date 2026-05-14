@@ -1,3 +1,7 @@
+# Threshold for triggering the Analog PIR sensors
+APIR_DISPLACEMENT_THRESHOLD = 0.5
+APIR_GRADIENT_THRESHOLD = 600
+
 # Mas current in mA
 MAX_CURRENT = 1600
 

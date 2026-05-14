@@ -1,8 +1,8 @@
 import os
-from datetime import datetime
+import datetime
 
-filename = os.path.join(os.path.dirname(__file__), "pyboard/upload_time.py" )
-now = datetime.utcnow()
+filename = os.path.join(os.path.dirname(__file__), "src/upload_time.py" )
+now = datetime.datetime.now(datetime.UTC)
 with open(filename, "w") as file:
     file.write(f"seconds = {now.second}\n")
     file.write(f"minutes = {now.minute}\n")
