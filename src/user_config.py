@@ -8,3 +8,6 @@ MAX_CURRENT = 1600
 # Position (Used for day and night calculations)
 LATITUDE = -43.532055
 LONGITUDE = 172.636230
+
+# Loop interval in minutes, on program 8 this is how often it will loop the program.
+TEST_LOOP_INTERVAL = 120
