@@ -7,53 +7,50 @@ import time
 from util import *
 from machine import Pin
 
+import time
+from util import Spool, PIRs, Clock
+from user_config import *
+
 rx_pin = Pin(29, Pin.IN, Pin.PULL_DOWN)
+spool = Spool()
+pirs = PIRs()
 
-i2c = I2C(id=0, scl=Pin(PIN_SCL), sda=Pin(PIN_SDA))
+print("Resetting")
+spool.reset_sequence()
+time.sleep(2)
 
-spool = Spool(i2c)
-pirs = PIRs(i2c)
-clock = Clock(i2c)
-buzzer = Buzzer()
+print("Waiting for PIRs to detect motion while the trap is active.")
+old_state = ""
 
 while True:
-    print("Resetting")
-    spool.reset_sequence()
-    time.sleep(2)
-    
-    buzzer.beep_trap_ready()
+    # Take reading to determine state
+    motion = not pirs.read() == 0
+    enabled = rx_pin.value() == 1
 
-    print("Moving to home position.")
-    spool.move_to_home()
-    time.sleep(2)
-
-    print("Waiting for PIRs to detect motion during the active window.")
-    old_state = ""
-    while True:
-        # Check the state of the enable Pin and PIRs
-        if rx_pin.value():
-            if pirs.read() == 0:
-                state = "active, no pir movement"
-            else:
-                print("active and pir movement")
-                break
+    # Check what new state we are in.
+    if motion:
+        if enabled:
+            print("Motion detected, releasing spool.")
+            spool.release()
+            print(f"Waiting {SPOOL_RESET_DELAY_MINUTES} minutes until resetting.")
+            time.sleep(SPOOL_RESET_DELAY_MINUTES * 60)
+            print("Resetting")
+            spool.reset_sequence()
+            print("Waiting one minute before activating trap again.")
+            time.sleep(60)
+            new_state = "Trap is reset"
         else:
-            if pirs.read() == 0:
-                state = "not active, no pir movement"
-            else:
-                state = "not active, pir movement"
+            new_state = "Motion detected and not enabled, not releasing spool."
+    else:
+        if enabled:
+            new_state = "No motion detected and enabled, not releasing spool."
+        else:
+            new_state = "No motion detected and not enabled, not releasing spool."
 
-        # Print state if it has changed
-        if old_state != state:
-            print(state)
-            old_state = state
+    # Only print the state if it has changed
+    if new_state != old_state:
+        print(new_state)
+        old_state = new_state
 
-        # Small sleep
-        time.sleep(0.01)
-
-    spool.release()
-    print("Motion detected, releasing spool.")
-    time.sleep(2)
-
-    print("Waiting 10 minutes until resetting")
-    time.sleep(10*60)
+    # Wait a bit between loops
+    time.sleep(0.01)

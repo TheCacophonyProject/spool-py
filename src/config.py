@@ -35,6 +35,10 @@ PIN_ELECTROMAGNET_RELEASE = 18
 PIN_UART_TX = 28
 PIN_UART_RX = 29
 
+# Switch pins
+PIN_SW_1 = 8
+PIN_SW_2 = 7
+
 # INA219 shunt resistor resistance in Ω
 SHUNT_OHMS = 0.1
 

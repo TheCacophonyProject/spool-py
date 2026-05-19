@@ -9,6 +9,12 @@ from ina219 import INA219
 
 MAX_U16 = 65535
 
+sw_ignore = "ignore"
+sw_open = "open"
+sw_closed = "closed"
+sw_and = "and"
+sw_or = "or"
+
 i2c = I2C(id=0, scl=Pin(PIN_SCL), sda=Pin(PIN_SDA))
 
 class Spool:
@@ -19,6 +25,7 @@ class Spool:
         self.h_in2 = PWM(Pin(PIN_H_IN_2), freq=20000)
         self.h_in2.duty_u16(0)
         self.direction = "stop"
+        self.clock = Clock(i2c)
 
         # Photointerrupter pins, set power to off.
         self.en_photo_interrupter = Pin(PIN_EN_PHOTO_INTERRUPTER, Pin.OUT)
@@ -40,6 +47,20 @@ class Spool:
         # Buzzer
         self.buzzer = Buzzer()
 
+        # Init switches. The switches when closed will connect them to ground. So we set them up with PULL_UP
+        self.sw1 = Pin(PIN_SW1, Pin.IN, Pin.PULL_UP)
+        self.sw2 = Pin(PIN_SW2, Pin.IN, Pin.PULL_UP)
+        self.sw1_disable_when = SWITCH1_DISABLE.lower()
+        self.sw2_disable = SWITCH2_DISABLE.lower()
+        self.sw_logic = SWITCH_LOGIC.lower()
+        # Check valid configuration.
+        if self.sw1_disable_when not in [sw_closed, sw_open, sw_ignore]:
+            raise ValueError("SWITCH1_DISABLE must be either 'OPEN', 'CLOSED', or 'IGNORE'")
+        if self.sw2_disable not in [sw_closed, sw_open, sw_ignore]:
+            raise ValueError("SWITCH2_DISABLE must be either 'OPEN' or 'CLOSED' or 'IGNORE'")
+        if self.sw_logic not in [sw_and, sw_or]:
+            raise ValueError("SWITCH_LOGIC must be either 'AND' or 'OR'")
+
     def stop(self):
         # Writing both values to high will set the motor driver into "break/stop" mode.
         self.h_in1.duty_u16(MAX_U16)
@@ -48,6 +69,44 @@ class Spool:
         self.direction = "stop"
         # TODO: After we have stopped we might want to switch into LOW, LOW instead
         # of HIGH, HIGH so the motor driver will go into a sleep mode to save power.
+
+    # Disabled check will return a bool and reason for disabling
+    def is_enabled(self):
+        # Check if in observation mode.
+        if OBSERVATION_MODE:
+            return False
+
+        # Check if disabled from 24 hour timer.
+        if not self.clock.in_active_window():
+            return False
+
+        # Check if disabled from switches.
+        # Check if switch 1 wants trap to be disabled
+        sw1_disabled = False
+        if self.sw1_disable_when != sw_ignore:
+            sw1_state = self.sw1.value()
+            if sw1_state == 1 and self.sw1_disable_when == sw_open:
+                sw1_disabled = True
+            if sw1_state == 0 and self.sw1_disable_when == sw_closed:
+                sw1_disabled = True
+        # Check if switch 2 wants trap to be disabled
+        sw2_disabled = False
+        if self.sw2_disable_when != sw_ignore:
+            sw2_state = self.sw1.value()
+            if sw2_state == 1 and self.sw1_disable_when == sw_open:
+                sw2_disabled = True
+            if sw2_state == 0 and self.sw1_disable_when == sw_closed:
+                sw2_disabled = True
+        # Check if the trap should be disabled based on switch logic
+        if self.sw_logic == sw_and:
+            disabled = sw1_disabled and sw2_disabled
+        if self.sw_logic == sw_or:
+            disabled = sw1_disabled or sw2_disabled
+        if disabled:
+            return False
+
+        # If we get here then nothing is disabling the trap
+        return True
 
     # _drive_cw is towards reset
     def _drive_cw(self, speed=100):
