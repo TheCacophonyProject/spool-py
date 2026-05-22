@@ -48,17 +48,11 @@ ERROR_NO_PROGRAM_FOUND = 4
 ERROR_MOVEMENT_TIMEOUT = 5
 CANNOT_FIND_HOME = 6
 ERROR_OVER_CURRENT = 7
+ERROR_RUNTIME_ERROR = 8
 
 # Indicator LEDs
 PIN_LED_1 = 7   # PIR trigger
 PIN_LED_2 = 8   # thermal trigger
 
 # This is used so when resetting the first time it knows how long each "step" should be.
-HOME_TO_RESET_DURATION = 10
-
-# Mas current in mA
-MAX_CURRENT = 1600
-
-# Position (Used for day and night calculations)
-LATITUDE = -43.532055
-LONGITUDE = 172.636230
+HOME_TO_RESET_DURATION = 13

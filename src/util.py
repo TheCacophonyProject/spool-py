@@ -5,6 +5,8 @@ from machine import I2C, UART, Pin, PWM, ADC, reset
 from config import *
 from user_config import *
 import time
+import _thread
+import ujson
 from ina219 import INA219
 
 MAX_U16 = 65535
@@ -18,7 +20,7 @@ sw_or = "or"
 i2c = I2C(id=0, scl=Pin(PIN_SCL), sda=Pin(PIN_SDA))
 
 class Spool:
-    def __init__(self, i2c=i2c):
+    def __init__(self, i2c=i2c, rpi_uart=None):
         # H-Bridge driver pins, set frequency and set to 0
         self.h_in1 = PWM(Pin(PIN_H_IN_1), freq=20000)
         self.h_in1.duty_u16(0)
@@ -26,6 +28,7 @@ class Spool:
         self.h_in2.duty_u16(0)
         self.direction = "stop"
         self.clock = Clock(i2c)
+        self.rpi_uart = rpi_uart
 
         # Photointerrupter pins, set power to off.
         self.en_photo_interrupter = Pin(PIN_EN_PHOTO_INTERRUPTER, Pin.OUT)
@@ -47,20 +50,6 @@ class Spool:
         # Buzzer
         self.buzzer = Buzzer()
 
-        # Init switches. The switches when closed will connect them to ground. So we set them up with PULL_UP
-        self.sw1 = Pin(PIN_SW1, Pin.IN, Pin.PULL_UP)
-        self.sw2 = Pin(PIN_SW2, Pin.IN, Pin.PULL_UP)
-        self.sw1_disable_when = SWITCH1_DISABLE.lower()
-        self.sw2_disable = SWITCH2_DISABLE.lower()
-        self.sw_logic = SWITCH_LOGIC.lower()
-        # Check valid configuration.
-        if self.sw1_disable_when not in [sw_closed, sw_open, sw_ignore]:
-            raise ValueError("SWITCH1_DISABLE must be either 'OPEN', 'CLOSED', or 'IGNORE'")
-        if self.sw2_disable not in [sw_closed, sw_open, sw_ignore]:
-            raise ValueError("SWITCH2_DISABLE must be either 'OPEN' or 'CLOSED' or 'IGNORE'")
-        if self.sw_logic not in [sw_and, sw_or]:
-            raise ValueError("SWITCH_LOGIC must be either 'AND' or 'OR'")
-
     def stop(self):
         # Writing both values to high will set the motor driver into "break/stop" mode.
         self.h_in1.duty_u16(MAX_U16)
@@ -70,43 +59,11 @@ class Spool:
         # TODO: After we have stopped we might want to switch into LOW, LOW instead
         # of HIGH, HIGH so the motor driver will go into a sleep mode to save power.
 
-    # Disabled check will return a bool and reason for disabling
-    def is_enabled(self):
-        # Check if in observation mode.
-        if OBSERVATION_MODE:
-            return False
-
-        # Check if disabled from 24 hour timer.
-        if not self.clock.in_active_window():
-            return False
-
-        # Check if disabled from switches.
-        # Check if switch 1 wants trap to be disabled
-        sw1_disabled = False
-        if self.sw1_disable_when != sw_ignore:
-            sw1_state = self.sw1.value()
-            if sw1_state == 1 and self.sw1_disable_when == sw_open:
-                sw1_disabled = True
-            if sw1_state == 0 and self.sw1_disable_when == sw_closed:
-                sw1_disabled = True
-        # Check if switch 2 wants trap to be disabled
-        sw2_disabled = False
-        if self.sw2_disable_when != sw_ignore:
-            sw2_state = self.sw1.value()
-            if sw2_state == 1 and self.sw1_disable_when == sw_open:
-                sw2_disabled = True
-            if sw2_state == 0 and self.sw1_disable_when == sw_closed:
-                sw2_disabled = True
-        # Check if the trap should be disabled based on switch logic
-        if self.sw_logic == sw_and:
-            disabled = sw1_disabled and sw2_disabled
-        if self.sw_logic == sw_or:
-            disabled = sw1_disabled or sw2_disabled
-        if disabled:
-            return False
-
-        # If we get here then nothing is disabling the trap
-        return True
+    def enable_check(self):
+        if self.at_home():
+            return True, ""
+        else:
+            return False, "spool not home"
 
     # _drive_cw is towards reset
     def _drive_cw(self, speed=100):
@@ -170,6 +127,11 @@ class Spool:
         time.sleep(0.5)
         self.move_to_home()
         time.sleep(0.5)
+         # Make event that the trap has been released
+        if self.rpi_uart is not None:
+            self.rpi_uart.send_message(Message(0, "TRAP_RESET"))
+        else:
+            print("No rpi_uart")
         print("Finished reset sequence =================")
 
 
@@ -180,7 +142,7 @@ class Spool:
             return True
         self._drive_cw()
         return self._wait_to_stop_spool(self.at_reset, timeout, timeout_error)
-    
+
     def move_to_home(self, timeout=15, timeout_error=True):
         print("Moving to home")
         if self.at_home():
@@ -193,13 +155,17 @@ class Spool:
         # It is only safe to trigger the trap if the spool has made it back to the home position.
         if not self.at_home():
             return False
-        
+
         # At home position so it is safe to release the trap.
         self.electromagnet_en_pin.on()
         time.sleep(0.5)
         self.electromagnet_en_pin.off()
+
+        # Make event that the trap has been released
+        if self.rpi_uart is not None:
+            self.rpi_uart.send_message(Message(0, "TRAP_RELEASED"))
+
         return True
-        
 
     def _wait_to_stop_spool(self, checker_function, timeout, error_on_timeout):
         start_time = time.time()
@@ -243,6 +209,51 @@ class Spool:
                 self.buzzer.beep_error(ERROR_OVER_CURRENT)
                 self.ina219.sleep()
                 return False
+
+class Switches:
+    def __init__(self):
+        # Init switches. The switches when closed will connect them to ground. So we set them up with PULL_UP
+        self.sw1 = Pin(PIN_SW_1, Pin.IN, Pin.PULL_UP)
+        self.sw2 = Pin(PIN_SW_2, Pin.IN, Pin.PULL_UP)
+        self.sw1_disable_when = SWITCH1_DISABLE.lower()
+        self.sw2_disable_when = SWITCH2_DISABLE.lower()
+        self.sw_logic = SWITCH_LOGIC.lower()
+        # Check valid configuration.
+        if self.sw1_disable_when not in [sw_closed, sw_open, sw_ignore]:
+            raise ValueError("SWITCH1_DISABLE must be either 'OPEN', 'CLOSED', or 'IGNORE'")
+        if self.sw2_disable_when not in [sw_closed, sw_open, sw_ignore]:
+            raise ValueError("SWITCH2_DISABLE must be either 'OPEN' or 'CLOSED' or 'IGNORE'")
+        if self.sw_logic not in [sw_and, sw_or]:
+            raise ValueError("SWITCH_LOGIC must be either 'AND' or 'OR'")
+
+    def enable_check(self):
+        # Check if switch 1 wants trap to be disabled
+        sw1_disabled = False
+        if self.sw1_disable_when != sw_ignore:
+            sw1_state = self.sw1.value()
+            if sw1_state == 1 and self.sw1_disable_when == sw_open:
+                sw1_disabled = True
+            if sw1_state == 0 and self.sw1_disable_when == sw_closed:
+                sw1_disabled = True
+        # Check if switch 2 wants trap to be disabled
+        sw2_disabled = False
+        if self.sw2_disable_when != sw_ignore:
+            sw2_state = self.sw2.value()
+            if sw2_state == 1 and self.sw1_disable_when == sw_open:
+                sw2_disabled = True
+            if sw2_state == 0 and self.sw1_disable_when == sw_closed:
+                sw2_disabled = True
+        # Check if the trap should be disabled based on switch logic
+        if self.sw_logic == sw_and:
+            disabled = sw1_disabled and sw2_disabled
+        if self.sw_logic == sw_or:
+            disabled = sw1_disabled or sw2_disabled
+        if disabled:
+            return False, "switches"
+
+        # If we get here then nothing is disabling the trap
+        return True, ""
+
 
 class RingAvg:
     def __init__(self, size):
@@ -296,6 +307,7 @@ class Buzzer:
         print("Trap is ready.")
 
     def beep_error(self, beeps):
+        print(f"Error {beeps}")
         for _ in range(3):
             for _ in range(3):
                 self.on()
@@ -365,6 +377,12 @@ class Clock:
             return self.is_night()
         return True
 
+    def enable_check(self):
+        if self.in_active_window():
+            return True, ""
+        else:
+            return False, "time window"
+
     def check_low_voltage(self):
         return self.r.check_low_voltage()
 
@@ -392,8 +410,53 @@ class PIRs:
         self.i2c.writeto(0x3E, bytes([0, value]))
 
 class RPi_UART:
-    def __init__(self):
+    def __init__(self, shared_dict):
+        self.shared_dict = shared_dict
+        self._running = True
         self.uart = UART(0, baudrate=9600, tx=Pin(PIN_UART_TX), rx=Pin(PIN_UART_RX))
+        _thread.start_new_thread(self._uart_loop, ())
+
+    def close(self):
+        self._running = False
+        self.uart.deinit()
+
+    def _uart_loop(self):
+        while self._running:
+            # Get a new message
+            message = self.check_for_message()
+
+            # Ignore if no message
+            if message is None:
+                continue
+
+            # Process the message
+            if message.type == "ACK":
+                print("Received ACK message") # TODO figure out what we want to do in this situation.
+                continue
+            
+            elif message.type == "NACK":
+                print("Received NACK message") # TODO figure out what we want to do in this situation.
+                continue
+
+            elif message.type == "ENABLE":
+                print("Received ENABLE message")
+                # We will write to the shared dict to set enable to true.
+                if self.shared_dict.set("enable", True):
+                    self.send_ack(message.id)
+                else:
+                    self.send_nack(message.id)
+
+            elif message.type == "DISABLE":
+                print("Received DISABLE message")
+                # We will write to the shared dict to set enable to false.
+                if self.shared_dict.set("enable", False):
+                    self.send_ack(message.id)
+                else:
+                    self.send_nack(message.id)
+
+            else:
+                print("Received unknown message type: {}".format(message.type))
+                self.send_nack(message.id)
 
     def check_for_message(self):
         # Check to see if there is any data in the UART buffer, if not return None
@@ -402,96 +465,108 @@ class RPi_UART:
         
         # There is some data so lets read the full line.
         # TODO: Timeout of reading the whole line
-        line = bytearray()
+        line_raw = bytearray()
         while True:
             if self.uart.any():
                 char = self.uart.read(1)
                 if char == b"\n":
                     break
-                line.extend(char)
+                line_raw.extend(char)
         
-        data = line.decode('utf-8')
+        line = line_raw.decode('utf-8')
         
-        # Check that we get the message in the correct format "<message|checksum>"
-        if not(data.startswith('<') and '|' in data and data.endswith('>')):
-            self.send({"response": "NACK", "error": "Invalid message format"})
-            return None
+        # Split from the last '>' to get the message and the checksum
+        last_index = line.rfind('>')
+        message_str = line[:last_index+1]
+        checksum = line[last_index+1:]
         
-        # Split out message and check the checksum
-        message_raw, checksum = data[1:-1].split('|') # TODO, split at last | in case there is one in the message.
-        if self._compute_checksum(message_raw.encode()) != int(checksum):
-            self.send({"response": "NACK", "error": "Checksum mismatch"})
-            return None
-        
-        # Load the message as a json and return
+        # Check the checksum
         try:
-            message_json = ujson.loads(message_raw)
-        except Exception as e:
-            self.send({"response": "NACK", "error": "Parsing error"})
+            if self._compute_checksum(message_str) != int(checksum):
+                self.send_nack()
+                return None
+        except ValueError:
+            self.send_nack()
             return None
 
-        # Turn the json into a Request object and return
-        return Request(message_json)
 
-    def send(self, data):
-        responseStr = "1" if data['response'] else "0"
-        d = f"<{data['id']}|{responseStr}|{data['payload']}>"
-        checksum = self._compute_checksum(d)
-        uart.write('{}{}'.format(json_str, checksum))
+
+        # Check that we get the message in the correct format "<id|type|payload>"
+        if not message_str.startswith('<') or message_str.count('|') < 2 or not message_str.endswith('>'):
+            print(f"Invalid message format {message_str}")
+            self.send_nack()    # TODO improve message for NACK reason
+            return None
+        
+        message_str = message_str[1:-1] # Remove the < and >
+        parts = message_str.split("|") # Split the message into components
+        id = int(parts[0])    # Get the ID
+        type = parts[1]       # Get the type
+        payload = '|'.join(parts[2:]) # Get the payload, joining back in any split '|'
+
+        message = Message(id, type, payload)
+        return message        
+
+    def send_message(self, message):
+        message_str = f"<{message.id}|{message.type}|{message.payload}>"
+        checksum = self._compute_checksum(message_str)
+        line = f"{message_str}{checksum}\n"
+        print(f"Sending: {line}")
+        self.uart.write(line)
 
     def _compute_checksum(self, message):
-        return sum(message) % 256
+        return sum(message.encode()) % 256
 
-    def send_nack(self, message_id=0):
-        self.send({
-            "id": id,
-            "response": True,
-            "type": "NACK",
-            "payload": ""
-        })
+    def send_nack(self, message_id=0, payload=""):
+        self.send_message(Message(message_id, "NACK", payload))
     
     def send_ack(self, message_id=0):
-        self.send({
-            "id": id,
-            "response": True,
-            "type": "ACK",
-            "payload": ""
-        })
+        self.send_message(Message(message_id, "ACK"))
 
-class Request():
-    def __init__(self, json):
-        self.id = json.get('id')
-        self.response = json.get('response')
-        self.type = json.get('type')
-        self.data = ujson.loads(json.get('data'))
-        print("new request, id: {}, response: {}, type: {}, data: {}".format(self.id, self.response, self.type, self.data))
-        
-    def run(self):
-        if self.type == "write":
-            write_read_data[self.data.get('var')] = self.data.get('val')
-            print(write_read_data)
-            send_response(ack_message(self.id))
-            return
-        if self.type == "read":
-            send_response({
-                "id": id,
-                "response": True,
-                "type": "read",
-                "data": {self.data.get('var'): write_read_data[self.data.get('var')]}
-            })
-            return
-        
-        if self.type == "command":
-            command = actions[self.data.get('command')]
-            #TODO add params
-            if command:
-                send_response(ack_message(self.id))
-                command()
-            else:
-                send_response(nack_message(self.id))
-            return
+class Message():
+    def __init__(self, id, type, payload = ""):
+        self.id = id
+        self.type = type
+        self.payload = payload
+        print("New message, id: {}, type: {}, payload: {}".format(self.id, self.type, self.payload))
 
-        send_response(nack_message(self.id))
+def motion_message():
+    return Message(0, "motion")
+
+class SharedDict:
+    def __init__(self):
+        self._data = {}
+        self._lock = _thread.allocate_lock()
+
+    def get(self, key, default=None):
+        self._lock.acquire()
+        try:
+            return self._data.get(key, default)
+        finally:
+            self._lock.release()
+
+    def set(self, key, value, new_key=False):
+        self._lock.acquire()
+        try:
+            if key not in self._data and not new_key:
+                return False
+            self._data[key] = value
+            return True
+        finally:
+            self._lock.release()
+
+
+    def contains(self, key):
+        self._lock.acquire()
+        try:
+            return key in self._data
+        finally:
+            self._lock.release()
+
+    def enable_check(self):
+        if self.get("enable", default=False):
+            return True, "Camera set trap to enabled"
+        else:
+            return False, "Camera set trap to disabled"
 
 class APIR():
     def __init__(self):
@@ -506,7 +581,7 @@ class APIR():
         self.displacement_triggered = False
         self.gradient_triggered = False
 
-    def update(self):
+    def motion(self):
         # Prevent updating too frequently, 0.5ms
         if time.time_ns() - self.last_time < 1_000_000:
             return
@@ -529,4 +604,7 @@ class APIR():
 
         self.previous_value = new_value
         self.last_time = new_time
+
+        # Return if there was motion
+        return self.displacement_triggered or self.gradient_triggered
   

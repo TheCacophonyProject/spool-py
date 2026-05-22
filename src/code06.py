@@ -1,13 +1,13 @@
-# Program 1 will run the trap triggering from the PIRs. Can be set to only trigger at night.
+# Program 1 will run the trap triggering from the APIRs.
 
 import time
-from util import Spool, PIRs, RPi_UART, motion_message, SharedDict, Clock, Switches
+from util import Spool, PIRs, RPi_UART, motion_message, SharedDict, Clock, Switches, APIR
 from user_config import *
 
 shared_dict = SharedDict()
 rpi_uart = RPi_UART(shared_dict)
 spool = Spool(rpi_uart=rpi_uart)
-pirs = PIRs()
+apirs = APIR()
 clock = Clock()
 switches = Switches()
 
@@ -15,14 +15,12 @@ print("Resetting")
 spool.reset_sequence()
 time.sleep(2)
 
-print("Waiting for PIRs to detect motion while the trap is active.")
+print("Waiting for APIRs to detect motion while the trap is active.")
 old_state = ""
 
 last_motion_message = -10
 motion_message_gap = 30 # Minimum time between motion messages
 old_enabled = False
-
-
 
 enabled_checks = [
     spool.enable_check,        # Check that the spool is at the home position
@@ -45,7 +43,7 @@ old_failed_check_reasons = ""
 
 while True:
     # Take reading to determine state
-    motion = not pirs.read() == 0
+    motion = apirs.motion()
 
     enabled, failed_check_reasons = check_checks(enabled_checks)
     if failed_check_reasons != old_failed_check_reasons:

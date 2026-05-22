@@ -21,7 +21,7 @@ led2_off_time = 0
 
 while True:
     # print("======")
-    apir.update()
+    apir.motion()
     now = time.time()
 
     if apir.displacement_triggered:

@@ -3,11 +3,12 @@ import machine
 from time import sleep
 import pcf8563
 import os
+import sys
+import io
 import datetime
-from util import Buzzer, Clock, RotaryEncoder, RPi_UART
+from util import Buzzer, Clock, RotaryEncoder, RPi_UART, Message
 from config import *
 
-uart = RPi_UART(baudrate=9600)
 i2c = I2C(id=0, scl=Pin(PIN_SCL), sda=Pin(PIN_SDA))
 
 buzzer = Buzzer()
@@ -81,10 +82,22 @@ sleep(1)
 
 filename = "/code{:02d}.py".format(n)
 
+def uart_one_message(message: Message):
+    uart = None
+    try:
+        uart = RPi_UART(None)
+        uart.send_message(message)
+    except Exception as err:
+        print(get_err_str(err))
+        print("Error when trying to send message via UART")
+    finally:
+        if uart is not None:
+            uart.close()
 
-import sys
-
-import io
+def get_err_str(err):
+    buf = io.StringIO()
+    sys.print_exception(err, buf)
+    return buf.getvalue()
 
 def save_error(err):
     try:
@@ -92,17 +105,14 @@ def save_error(err):
         stat = os.statvfs("/")
         free_bytes = stat[0] * stat[3]
         print("Free bytes: " + str(free_bytes))
-        if free_bytes < 10_000_000:
+        if free_bytes < 100_000:
             print("Not enough space to save error.log")
             return
-        
         # Save the error with the timestamp
-        buf = io.StringIO()
-        sys.print_exception(err, buf)
         timestamp = str(clock.get_utc_time())
         with open("error.log", "a") as f:
             f.write("--- " + timestamp + " ---\n")
-            f.write(buf.getvalue())
+            f.write(get_err_str(err))
             f.write("\n")
         print("Error saved to error.log")
 
@@ -116,7 +126,8 @@ while True:
         os.stat(filename)
     except OSError:
         print(filename + " not found")
-        uart.send({"type": "error", "data": filename + " not found"})
+        uart_one_message(Message(0, "error", filename + " not found"))
+        uart.close()
         buzzer.beep_error(ERROR_NO_PROGRAM_FOUND)
         sleep(10)
         continue
@@ -125,12 +136,13 @@ while True:
     try:
         with open(filename) as f:
             print("running " + filename)
-            uart.send({"type": "running", "data": filename})
+            uart_one_message(Message(0, "running", filename))
             exec(f.read())
     except Exception as e:
-        print("Runtime error:", e)
-        uart.send({"type": "error", "data": str(e)})
-        sys.print_exception(e)
+        print("Runtime error: " + get_err_str(e) + "\n")
+        uart_one_message(Message(0, "runtime error", get_err_str(e)))
         save_error(e)
+        
         buzzer.beep_error(ERROR_RUNTIME_ERROR)
-    sleep(10)
+    sleep(60)
+    machine.reset()

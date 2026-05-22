@@ -1,0 +1,39 @@
+#!/bin/bash
+
+remote_host=""
+
+for arg in "$@"; do
+    case "$arg" in
+        -*)
+            echo "Unknown argument: $arg"; exit 1 ;;
+        *)
+            if [ -z "$remote_host" ]; then
+                remote_host="$arg"
+            else
+                echo "Unknown argument: $arg"; exit 1
+            fi
+            ;;
+    esac
+done
+
+if [ -z "$remote_host" ]; then
+    echo "Usage: $0 <user@host>"
+    exit 1
+fi
+
+scriptDir="$(cd "$(dirname "$0")" && pwd)"
+remote_tmp="/tmp/spool-upload"
+
+echo "Copying files to $remote_host..."
+ssh "$remote_host" "mkdir -p $remote_tmp/src"
+scp -r "$scriptDir/src/"* "$remote_host:$remote_tmp/src/"
+scp "$scriptDir/upload" "$remote_host:$remote_tmp/upload"
+ssh "$remote_host" "chmod +x $remote_tmp/upload"
+
+prescript="$scriptDir/pre-script.py"
+if [ -f "$prescript" ]; then
+    scp "$prescript" "$remote_host:$remote_tmp/pre-script.py"
+fi
+
+echo "Running upload on $remote_host..."
+ssh -t "$remote_host" "$remote_tmp/upload"

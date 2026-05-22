@@ -58,3 +58,17 @@ The camera can:
 ### Program 8
 
 Program 8 is a test program, will communicate with the trap over UART for logging purposes.
+
+## Events
+
+When the trap communicates with the camera it can send though messages that the camera will turn into events. These are:
+
+- trap-motion: Each time the trap detects motion it will report this, limited to one every 30 seconds. This is intended to help with seeing how the trap might be over/under triggering.
+- trap-enabled: The trap was disabled but it is now enabled.
+- trap-disabled: The trap was enabled but it is now disabled. TOOD: Do we want to add the reason for the trap to be disabled here? Cage switch, daytime, remote-disabled?
+- trap-enable-command: The trap has had a message from the camera that it can be enable. Note that the trap might still be disabled for other reasons (daytime, cage switch)
+- trap-disable-command: The trap has had a message from the camera to disable it.
+- trap-error: This catches a couple different types of errors.
+  - error-code: An recognised error has happened. This will also make the trap beep.
+  - runtime-error: An python runtime error occurred.
+- Switch state change event: TODO

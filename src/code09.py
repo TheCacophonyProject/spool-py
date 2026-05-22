@@ -8,7 +8,8 @@ i2c = I2C(id=0, scl=Pin(PIN_SCL), sda=Pin(PIN_SDA))
 
 spool = Spool(i2c)
 
-loop_time_seconds = 60 * 3
+# It will go through the loop every `loop_time_seconds` amount of seconds. So 120 means 30 loops a hour
+loop_time_seconds = 60 * TEST_LOOP_INTERVAL
 
 while True:
     start_time = time.time() # Get start time in seconds

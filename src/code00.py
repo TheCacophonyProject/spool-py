@@ -1,15 +1,23 @@
 from util import *
 import time
 
-# // TODO: Change how the message is formatted so it is more concise. Something like: <ID|Type|Payload>CRC
-# //   - ID is a uint16
-# //   - Type is a string (ACK, NACK, Read, writeConfig, Command, Response...)
-# //   - Payload is as many bytes as needed
-# //   - CRC is 2 byte checksum
+# It might be that with some queries that we reply with an ACK right away and then after collected the data for the response then respond?
+
+
+# TODO: Change how the message is formatted so it is more concise. Something like: <ID|Type|Payload>CRC
+#   - ID is a uint16
+#   - Type is a string (ACK, NACK, Read, writeConfig, Command, Response...)
+#   - Payload is as many bytes as needed
+#   - CRC 
    
+# TODO: These are the messages we need to add for the minimum AI trap setup.
+#       - ACK - Acknowledges a message, can be handled on other thread
+#       - NACK - Denies a message, can be handled on other thread
+#       - enable - Enables the trap, can be handled on the other thread as long as the variable can be accessed thread safe
+#       - disable - Enables the trap, can be handled on the other thread as long as the variable can be accessed thread safe
+
 # TODO: These are the different types of messages that can be sent and how they will be processed.
-#       - ACK - Acknowledges a message
-#       - NACK - Denies a message
+
 #       - writeConfig - Payload is a json file of the configuration.
 #       - deleteFile - Payload is the file to be deleted.
 #       - writeLines - Payload is a JSON with {file: "filename", lines: ["line1", "line2", ...]}

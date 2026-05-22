@@ -12,8 +12,8 @@ SPOOL_RESET_DELAY_MINUTES = 10
 LATITUDE = -43.532055
 LONGITUDE = 172.636230
 
-# Loop interval in minutes, on program 8 this is how often it will loop the program.
-TEST_LOOP_INTERVAL = 120
+# Loop interval in minutes, on program 9 this is how often it will loop the program.
+TEST_LOOP_INTERVAL = 180
 
 # Switch disables.
 # This can be configured to disable the trap from triggering when one or both of the switches is "OPEN" or "CLOSED".
