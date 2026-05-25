@@ -36,3 +36,11 @@ SWITCH_LOGIC = "OR"
 # This can be useful for testing how well the AI trigger works without scaring the animals.
 # We might just add a "motion" event so we don't need to add details on if the trap is in observation mode or not.
 OBSERVATION_MODE = False
+
+
+# MOTION_MESSAGE_GAP is the minimum time between motion messages being sent over the UART.
+MOTION_MESSAGE_GAP = 10
+
+# POST_RESET_COOLDOWN_SECONDS is the number of seconds to wait after the spool has been reset before running the trap checks.
+# This is because sometime the motion of resetting the trap can trigger the motion sensors so we want to just wait a little bit.
+POST_RESET_COOLDOWN_SECONDS = 20

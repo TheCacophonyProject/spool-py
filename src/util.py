@@ -608,3 +608,93 @@ class APIR():
         # Return if there was motion
         return self.displacement_triggered or self.gradient_triggered
   
+def check_checks(enable_checks):
+    failed_reasons = []
+    all_passed = True
+    for check in enable_checks:
+        check_passed, reason = check()
+        if not check_passed:
+            all_passed = False
+            failed_reasons.append(reason)
+    return all_passed, ', '.join(failed_reasons)
+
+# run_sequence takes the spool, motion_check, enable_checks, rpi_uart and from that can run
+# through a trap sequence.
+# This sequence is:
+# 1) Reset spool
+# 2) Wait for motion check and all enable checks to pass.
+#   2a) If motion is detected or the enable checks failing change then make a event reporting this.
+# 3) Release spool.
+# 4) Wait for SPOOL_RESET_DELAY_MINUTES
+# 5) Back to step 1, resetting the spool
+def run_sequence(
+    spool: Spool,
+    motion_check,
+    enabled_checks,
+    rpi_uart=None,
+    ):
+    while True:
+        # Step 1: Reset spool
+        print("Resetting spool.")
+        spool.reset_sequence()
+        print(f"Waiting {POST_RESET_COOLDOWN_SECONDS}s until running trap checks.")
+        time.sleep(POST_RESET_COOLDOWN_SECONDS)
+
+        # Step 2: Wait for motion check and all enable checks to pass.
+        print("Waiting for motion check and all enable checks to pass.")
+        last_motion_message = -MOTION_MESSAGE_GAP
+        old_enabled = None  # Track previous enabled state so we can log changes.
+        old_state = None
+        old_failed_check_reasons = None
+        while True:
+            # Check for motion.
+            motion = motion_check()
+
+            # Send a motion message if one hasn't been sent recently.
+            now = time.time()
+            if motion and last_motion_message + MOTION_MESSAGE_GAP < now:
+                if rpi_uart:
+                    rpi_uart.send_message(motion_message())
+                last_motion_message = now
+
+            # Check the enabled state
+            enabled, failed_check_reasons = check_checks(enabled_checks)
+
+            # Send message if the disabled reasons change changed
+            if not enabled and failed_check_reasons != old_failed_check_reasons:
+                if rpi_uart:
+                    rpi_uart.send_message(Message(0, "DISABLE_REASONS", failed_check_reasons))
+                else:
+                    print(failed_check_reasons)
+            old_failed_check_reasons = failed_check_reasons
+
+            # Send message if the enabled state changes
+            if old_enabled != enabled:
+                if enabled:
+                    if rpi_uart:
+                        rpi_uart.send_message(Message(0, "ENABLED"))
+                else:
+                    if rpi_uart:
+                        rpi_uart.send_message(Message(0, "DISABLED"))
+                old_enabled = enabled
+
+
+            if motion and enabled:
+                # Break out of loop to trigger spool release
+                break
+            
+            # Print a change in state
+            state = f"Motion: {motion}, Enabled: {enabled}"
+            if state != old_state:
+                print(state)
+                old_state = state
+            
+        # Step 3: Release spool.
+        print("Releasing spool.")
+        spool.release()
+
+        # Step 4: Wait for SPOOL_RESET_DELAY_MINUTES
+        print(f"Waiting {SPOOL_RESET_DELAY_MINUTES} minutes until resetting.")
+        time.sleep(SPOOL_RESET_DELAY_MINUTES * 60)
+
+        # Step 5: Back to step 1, resetting the spool
