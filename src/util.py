@@ -129,7 +129,7 @@ class Spool:
         time.sleep(0.5)
          # Make event that the trap has been released
         if self.rpi_uart is not None:
-            self.rpi_uart.send_message(Message(0, "TRAP_RESET"))
+            self.rpi_uart.send_message(Message(0, "SPOOL_RESET"))
         else:
             print("No rpi_uart")
         print("Finished reset sequence =================")
@@ -163,7 +163,7 @@ class Spool:
 
         # Make event that the trap has been released
         if self.rpi_uart is not None:
-            self.rpi_uart.send_message(Message(0, "TRAP_RELEASED"))
+            self.rpi_uart.send_message(Message(0, "TRIGGERED"))
 
         return True
 
@@ -530,7 +530,7 @@ class Message():
         print("New message, id: {}, type: {}, payload: {}".format(self.id, self.type, self.payload))
 
 def motion_message():
-    return Message(0, "motion")
+    return Message(0, "MOTION")
 
 class SharedDict:
     def __init__(self):
@@ -663,19 +663,16 @@ def run_sequence(
             # Send message if the disabled reasons change changed
             if not enabled and failed_check_reasons != old_failed_check_reasons:
                 if rpi_uart:
-                    rpi_uart.send_message(Message(0, "DISABLE_REASONS", failed_check_reasons))
+                    rpi_uart.send_message(Message(0, "DISABLED", failed_check_reasons))
                 else:
                     print(failed_check_reasons)
             old_failed_check_reasons = failed_check_reasons
 
-            # Send message if the enabled state changes
+            # Send message if the trap is now enabled
             if old_enabled != enabled:
                 if enabled:
                     if rpi_uart:
                         rpi_uart.send_message(Message(0, "ENABLED"))
-                else:
-                    if rpi_uart:
-                        rpi_uart.send_message(Message(0, "DISABLED"))
                 old_enabled = enabled
 
 

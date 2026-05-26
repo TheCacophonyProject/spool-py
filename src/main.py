@@ -126,7 +126,7 @@ while True:
         os.stat(filename)
     except OSError:
         print(filename + " not found")
-        uart_one_message(Message(0, "error", filename + " not found"))
+        uart_one_message(Message(0, "ERROR", filename + " not found"))
         uart.close()
         buzzer.beep_error(ERROR_NO_PROGRAM_FOUND)
         sleep(10)
@@ -136,7 +136,7 @@ while True:
     try:
         with open(filename) as f:
             print("running " + filename)
-            uart_one_message(Message(0, "running", filename))
+            uart_one_message(Message(0, "RUNNING", filename))
             exec(f.read())
     except Exception as e:
         print("Runtime error: " + get_err_str(e) + "\n")
