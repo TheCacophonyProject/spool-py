@@ -44,3 +44,7 @@ MOTION_MESSAGE_GAP = 10
 # POST_RESET_COOLDOWN_SECONDS is the number of seconds to wait after the spool has been reset before running the trap checks.
 # This is because sometime the motion of resetting the trap can trigger the motion sensors so we want to just wait a little bit.
 POST_RESET_COOLDOWN_SECONDS = 20
+
+
+# This should be set to true if there is a reed sensor wired up to detect if the spool is in the reset position.
+SPOOL_REED_CHECK = True

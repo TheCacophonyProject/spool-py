@@ -46,6 +46,7 @@ if True:
         print("updated the RTC time.")
 
     if clock.check_low_voltage() != 0:
+        # TODO: Send error message here
         buzzer.beep_error(ERROR_TIME_NOT_SET)
 
     #year, month, date, day, hour, minute, second = r.datetime()
@@ -140,7 +141,10 @@ while True:
             exec(f.read())
     except Exception as e:
         print("Runtime error: " + get_err_str(e) + "\n")
-        uart_one_message(Message(0, "runtime error", get_err_str(e)))
+        # We want to send the error via UART but it is often not available
+        # as it is was in use by the program. So we save the error to a file
+        # and sent it when starting up next.
+        uart_one_message(Message(0, "ERROR", get_err_str(e)))
         save_error(e)
         
         buzzer.beep_error(ERROR_RUNTIME_ERROR)

@@ -29,6 +29,7 @@ class Spool:
         self.direction = "stop"
         self.clock = Clock(i2c)
         self.rpi_uart = rpi_uart
+        self.spool_reset_pin = Pin(PIN_SPOOL_RESET, Pin.IN, Pin.PULL_UP)
 
         # Photointerrupter pins, set power to off.
         self.en_photo_interrupter = Pin(PIN_EN_PHOTO_INTERRUPTER, Pin.OUT)
@@ -48,7 +49,7 @@ class Spool:
         self.ina219.configure(gain = INA219.GAIN_8_320MV)
 
         # Buzzer
-        self.buzzer = Buzzer()
+        self.buzzer = Buzzer(rpi_uart=self.rpi_uart)
 
     def stop(self):
         # Writing both values to high will set the motor driver into "break/stop" mode.
@@ -99,13 +100,23 @@ class Spool:
     def at_reset(self):
         return self.photo_interrupter_reset.value() == 1
 
+    def spool_is_reset(self):
+        # When the spool is reset the reed switch will be close pulling the pin low
+        return self.spool_reset_pin.value() == 0
+
     def reset_sequence(self, steps=4):
         print("======== Running reset sequence ========")
+        
         # Stop and then move to home to start the reset sequence.
         self.stop()
-        time.sleep(0.2)
+        time.sleep(0.5)
         self.move_to_home()
-        time.sleep(1)
+        time.sleep(0.5)
+
+        # Check if the spool is already reset.
+        if SPOOL_REED_CHECK and self.spool_is_reset():
+            print("Spool already reset")
+            return
 
         # For the reset sequence rather than making it move directly to reset we make multiple 
         # "steps", each time returning back to home and then moving further next time.
@@ -118,22 +129,26 @@ class Spool:
             time.sleep(0.5)
             self.move_to_home()
             time.sleep(0.5)
-            
-        # TODO, put a time limit on this as to not burn out the motor if it takes too long
+
         start_time = time.time()
-        self.move_to_reset()
+        self.move_to_reset(timeout=self.home_to_reset_duration+5, timeout_error=True) # Give it 5 more seconds than expected in case it is a bit slow for some reason
         self.home_to_reset_duration = time.time() - start_time  # Update how long it takes to move from home to reset
-        print("home_to_reset_duration", self.home_to_reset_duration)
+        print("Time to reset spool: ", self.home_to_reset_duration)
         time.sleep(0.5)
-        self.move_to_home()
-        time.sleep(0.5)
-         # Make event that the trap has been released
+
+        # Move back to home and check if the reed switch shows that it didn't latch properly.
+        print("Moving to home, checking the spool stays reset.")
+        self._drive_ccw()
+        self._wait_to_stop_spool(
+            self.at_home, # Check if it has got to the target
+            self.home_to_reset_duration+5, # Give it 5 more seconds than expected in case it is a bit slow for some reason
+            True, # Error if it takes longer than expected
+            reed_check=SPOOL_REED_CHECK) # Check reed switch if configured to do so.
+
+        # Make event that the trap has been released
         if self.rpi_uart is not None:
             self.rpi_uart.send_message(Message(0, "SPOOL_RESET"))
-        else:
-            print("No rpi_uart")
         print("Finished reset sequence =================")
-
 
     def move_to_reset(self, timeout=15, timeout_error=True):
         print("Moving to reset")
@@ -165,9 +180,13 @@ class Spool:
         if self.rpi_uart is not None:
             self.rpi_uart.send_message(Message(0, "TRIGGERED"))
 
+        if SPOOL_REED_CHECK and self.spool_is_reset():
+            # The reset reed should not read it as still being reset
+            self.buzzer.beep_error(ERROR_SPOOL_NOT_RELEASING)
+
         return True
 
-    def _wait_to_stop_spool(self, checker_function, timeout, error_on_timeout):
+    def _wait_to_stop_spool(self, checker_function, timeout, error_on_timeout, reed_check=False):
         start_time = time.time()
         self.ina219.wake()
         avg = RingAvg(30)
@@ -192,6 +211,17 @@ class Spool:
                 self.ina219.sleep()
                 return False
             
+            # Check reed switch
+            if reed_check:
+                # We want to check that spool is staying reset.
+                if not self.spool_is_reset():
+                    print("Spool didn't reset properly.")
+                    self.stop()
+                    self.buzzer.beep_error(ERROR_FAILED_TO_RESET)
+                    self.ina219.sleep()
+                    return False
+
+            # Check current
             try:
                 current = self.ina219.current()
                 if current > max_current:
@@ -284,9 +314,10 @@ class RingAvg:
         return self.sum / self.size
 
 class Buzzer:
-    def __init__(self):
+    def __init__(self, rpi_uart=None):
         self.pwm_instance = PWM(Pin(PIN_BUZZER))
         self.off()
+        self.rpi_uart = rpi_uart
 
     def on(self):
         self.pwm(1000, 50)
@@ -308,6 +339,8 @@ class Buzzer:
 
     def beep_error(self, beeps):
         print(f"Error {beeps}")
+        if self.rpi_uart:
+            self.rpi_uart.send_error_code(beeps)
         for _ in range(3):
             for _ in range(3):
                 self.on()
@@ -521,6 +554,9 @@ class RPi_UART:
     
     def send_ack(self, message_id=0):
         self.send_message(Message(message_id, "ACK"))
+    
+    def send_error_code(self, error_id):
+        self.send_message(Message(0, "ERROR", error_id))
 
 class Message():
     def __init__(self, id, type, payload = ""):
