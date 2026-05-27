@@ -6,7 +6,9 @@ from config import *
 from user_config import *
 import time
 import _thread
-import ujson
+import io
+import sys
+import json
 from ina219 import INA219
 
 MAX_U16 = 65535
@@ -49,7 +51,7 @@ class Spool:
         self.ina219.configure(gain = INA219.GAIN_8_320MV)
 
         # Buzzer
-        self.buzzer = Buzzer(rpi_uart=self.rpi_uart)
+        self.buzzer = Buzzer()
 
     def stop(self):
         # Writing both values to high will set the motor driver into "break/stop" mode.
@@ -182,7 +184,7 @@ class Spool:
 
         if SPOOL_REED_CHECK and self.spool_is_reset():
             # The reset reed should not read it as still being reset
-            self.buzzer.beep_error(ERROR_SPOOL_NOT_RELEASING)
+            error_code(ERROR_SPOOL_NOT_RELEASING)
 
         return True
 
@@ -207,7 +209,7 @@ class Spool:
                 self.stop()
                 print("Finished move. Reason: Timed out")
                 if error_on_timeout:
-                    self.buzzer.beep_error(ERROR_MOVEMENT_TIMEOUT)
+                    error_code(ERROR_MOVEMENT_TIMEOUT)
                 self.ina219.sleep()
                 return False
             
@@ -217,7 +219,7 @@ class Spool:
                 if not self.spool_is_reset():
                     print("Spool didn't reset properly.")
                     self.stop()
-                    self.buzzer.beep_error(ERROR_FAILED_TO_RESET)
+                    error_code(ERROR_FAILED_TO_RESET)
                     self.ina219.sleep()
                     return False
 
@@ -236,7 +238,7 @@ class Spool:
                 self.stop()
                 print("Finished move. Reason: Over current")
                 # TODO, work out how we will handle this case
-                self.buzzer.beep_error(ERROR_OVER_CURRENT)
+                error_code(ERROR_OVER_CURRENT)
                 self.ina219.sleep()
                 return False
 
@@ -314,10 +316,9 @@ class RingAvg:
         return self.sum / self.size
 
 class Buzzer:
-    def __init__(self, rpi_uart=None):
+    def __init__(self):
         self.pwm_instance = PWM(Pin(PIN_BUZZER))
         self.off()
-        self.rpi_uart = rpi_uart
 
     def on(self):
         self.pwm(1000, 50)
@@ -336,26 +337,6 @@ class Buzzer:
             time.sleep(0.5)
             self.off()
         print("Trap is ready.")
-
-    def beep_error(self, beeps):
-        print(f"Error {beeps}")
-        if self.rpi_uart:
-            self.rpi_uart.send_error_code(beeps)
-        for _ in range(3):
-            for _ in range(3):
-                self.on()
-                time.sleep(0.2)
-                self.pwm(800, 50)
-                time.sleep(0.2)
-            self.off()
-            time.sleep(1)
-            for i in range(beeps):
-                self.on()
-                time.sleep(0.2)
-                self.off()
-                time.sleep(0.2)
-            time.sleep(1)
-        reset()
 
 class RotaryEncoder:
     def __init__(self):
@@ -731,3 +712,50 @@ def run_sequence(
         time.sleep(SPOOL_RESET_DELAY_MINUTES * 60)
 
         # Step 5: Back to step 1, resetting the spool
+
+def error_code(code, extra=None):
+    print(f"ERROR_CODE: {code}")
+    # Beep the error code 3 times
+    buzzer = Buzzer()
+    for _ in range(3):
+        for _ in range(3):
+            buzzer.on()
+            time.sleep(0.2)
+            buzzer.pwm(800, 50)
+            time.sleep(0.2)
+        buzzer.off()
+        time.sleep(1)
+        for i in range(code):
+            buzzer.on()
+            time.sleep(0.2)
+            buzzer.off()
+            time.sleep(0.2)
+        time.sleep(1)
+    if extra:
+        error("ERROR_CODE", f"{code}: {extra}")
+    else:
+        error("ERROR_CODE", code)
+
+def error_exception(exception):
+    buf = io.StringIO()
+    sys.print_exception(exception, buf)
+    exception_str = buf.getvalue()
+    print("EXCEPTION:", exception_str)
+    error("EXCEPTION", exception_str.splitlines())
+
+def error(type, payload, rpi_uart=None):
+    # Try to send the error via UART
+    message = Message(0, type, payload)
+    try:
+        # If not given a rpi_uart, try to create one
+        if not rpi_uart:
+            rpi_uart = RPi_UART(None)
+        rpi_uart.send_message(message)
+    except:
+        print("Failed to send error via UART. Saving error to file")
+        with open("error.json", "w") as f:
+            json.dump({"type": type, "payload": payload}, f)
+
+    # Restart the system
+    time.sleep(5)
+    reset()

@@ -6,8 +6,9 @@ import os
 import sys
 import io
 import datetime
-from util import Buzzer, Clock, RotaryEncoder, RPi_UART, Message
+from util import *
 from config import *
+import json
 
 i2c = I2C(id=0, scl=Pin(PIN_SCL), sda=Pin(PIN_SDA))
 
@@ -46,8 +47,7 @@ if True:
         print("updated the RTC time.")
 
     if clock.check_low_voltage() != 0:
-        # TODO: Send error message here
-        buzzer.beep_error(ERROR_TIME_NOT_SET)
+        error_code(ERROR_TIME_NOT_SET)
 
     #year, month, date, day, hour, minute, second = r.datetime()
     print("RTC time is (UTC): " + str(clock.get_utc_time()))
@@ -120,33 +120,34 @@ def save_error(err):
     except Exception:
         print("Error when trying to save to error.log")
 
-while True:
 
-    # Check if the program file exists.
-    try:
-        os.stat(filename)
-    except OSError:
-        print(filename + " not found")
-        uart_one_message(Message(0, "ERROR", filename + " not found"))
-        uart.close()
-        buzzer.beep_error(ERROR_NO_PROGRAM_FOUND)
-        sleep(10)
-        continue
+# Check if there is an error from the last boot that we need to report
+try:
+    with open("error.json", "r") as f:
+        error_to_send = json.load(f)
+    # Delete file so it doesn't get sent again
+    os.remove("error.json")
+    print("Sending saved error")
+    error(error_to_send["type"], error_to_send["payload"])
+except Exception as err:
+    pass
 
-    # Run the program.
-    try:
-        with open(filename) as f:
-            print("running " + filename)
-            uart_one_message(Message(0, "RUNNING", filename))
-            exec(f.read())
-    except Exception as e:
-        print("Runtime error: " + get_err_str(e) + "\n")
-        # We want to send the error via UART but it is often not available
-        # as it is was in use by the program. So we save the error to a file
-        # and sent it when starting up next.
-        uart_one_message(Message(0, "ERROR", get_err_str(e)))
-        save_error(e)
-        
-        buzzer.beep_error(ERROR_RUNTIME_ERROR)
-    sleep(60)
-    machine.reset()
+# Check if the program file exists.
+try:
+    os.stat(filename)
+except OSError:
+    print(filename + " not found")
+    error_code(ERROR_NO_PROGRAM_FOUND, extra=filename)
+
+# Run the program.
+try:
+    with open(filename) as f:
+        print("running " + filename)
+        uart_one_message(Message(0, "RUNNING", filename))
+        exec(f.read())
+except Exception as e:
+    print("Runtime error: " + get_err_str(e))
+    error_exception(e)
+
+# We should reset before we get here but just in case..
+reset()
