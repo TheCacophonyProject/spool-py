@@ -9,6 +9,9 @@ import _thread
 import io
 import sys
 import json
+import os
+import hashlib
+import binascii
 from ina219 import INA219
 
 MAX_U16 = 65535
@@ -443,30 +446,52 @@ class RPi_UART:
             if message is None:
                 continue
 
+            print(f"Received {message.type} message")
+
             # Process the message
             if message.type == "ACK":
-                print("Received ACK message") # TODO figure out what we want to do in this situation.
+                # TODO figure out what we want to do in this situation.
                 continue
             
             elif message.type == "NACK":
-                print("Received NACK message") # TODO figure out what we want to do in this situation.
+                # TODO figure out what we want to do in this situation.
                 continue
 
             elif message.type == "ENABLE":
-                print("Received ENABLE message")
                 # We will write to the shared dict to set enable to true.
                 if self.shared_dict.set("enable", True):
                     self.send_ack(message.id)
                 else:
-                    self.send_nack(message.id)
+                    self.send_bad_key(message.id)
 
             elif message.type == "DISABLE":
-                print("Received DISABLE message")
                 # We will write to the shared dict to set enable to false.
                 if self.shared_dict.set("enable", False):
                     self.send_ack(message.id)
                 else:
-                    self.send_nack(message.id)
+                    self.send_bad_key(message.id)
+
+            # TODO: Testing
+            elif message.type == "RESTART":
+                print("Restarting...")
+                time.sleep(1)
+                restart()
+
+            # TODO: Testing
+            elif message.type == "LS":
+                files = {}
+                for entry in os.ilistdir("/"):
+                    name, ftype = entry[0], entry[1]
+                    if ftype == 0x8000:  # regular file
+                        h = hashlib.sha256()
+                        with open("/" + name, "rb") as f:
+                            while True:
+                                chunk = f.read(512)
+                                if not chunk:
+                                    break
+                                h.update(chunk)
+                        files[name] = binascii.hexlify(h.digest()).decode()
+                self.send_message(Message(message.id, "LS", json.dumps(files)))
 
             else:
                 print("Received unknown message type: {}".format(message.type))
@@ -538,6 +563,9 @@ class RPi_UART:
     
     def send_error_code(self, error_id):
         self.send_message(Message(0, "ERROR", error_id))
+    
+    def send_bad_key(self, message_id=0):
+        self.send_message(Message(message_id, "BAD_KEY"))
 
 class Message():
     def __init__(self, id, type, payload = ""):
