@@ -10,6 +10,8 @@ import io
 import sys
 import json
 import os
+import deflate
+import io
 import hashlib
 import binascii
 from ina219 import INA219
@@ -509,13 +511,8 @@ class RPi_UART:
                     self.send_message(Message(message.id, "READ", json.dumps(lines)))
 
                 elif message.type == "WRITE":
-                    # Split from first comma
-                    print(message.payload)
                     parts = message.payload.split(",", 1)
-                    print(parts)
                     filename = parts[0]
-                    # Convert to a list
-                    print(parts[1])
                     lines = json.loads(parts[1])
 
                     with open(filename, "a") as f:
@@ -526,6 +523,32 @@ class RPi_UART:
                 elif message.type == "DELETE":
                     filename = message.payload
                     os.remove(filename)
+                    self.send_ack(message.id)
+
+                elif message.type == "DECOMPRESS":
+                    parts = message.payload.split(",")
+                    src = parts[0]
+                    dst = parts[1]
+                    bin_src = src + ".bin"
+                    # Decode base64 line by line to avoid holding all data in memory at once
+                    with open(src, "rb") as f_in, open(bin_src, "wb") as f_out:
+                        for line in f_in:
+                            line = line.strip()
+                            if line:
+                                f_out.write(binascii.a2b_base64(line))
+                    os.remove(src)
+                    # Stream decompress directly to the destination
+                    with open(bin_src, "rb") as f_in, open(dst, "wb") as f_out:
+                        try:
+                            with deflate.DeflateIO(f_in, deflate.RAW, 13) as d:
+                                while True:
+                                    chunk = d.read(256)
+                                    if not chunk:
+                                        break
+                                    f_out.write(chunk)
+                        except EOFError:
+                            pass
+                    os.remove(bin_src)
                     self.send_ack(message.id)
 
                 elif message.type == "MV":
@@ -546,7 +569,7 @@ class RPi_UART:
                     self.send_nack(message.id)
 
             except Exception as e:
-                print(e)
+                print(get_err_str(e))
 
     def check_for_message(self):
         # Check to see if there is any data in the UART buffer, if not return None
@@ -573,10 +596,10 @@ class RPi_UART:
         # Check the checksum
         try:
             if self._compute_checksum(message_str) != int(checksum):
-                self.send_nack()
+                self.send_nack(payload="Invalid checksum")
                 return None
         except ValueError:
-            self.send_nack()
+            self.send_nack(payload="Failed to send message")
             return None
 
 
@@ -584,7 +607,7 @@ class RPi_UART:
         # Check that we get the message in the correct format "<id|type|payload>"
         if not message_str.startswith('<') or message_str.count('|') < 2 or not message_str.endswith('>'):
             print(f"Invalid message format {message_str}")
-            self.send_nack()    # TODO improve message for NACK reason
+            self.send_nack("Invalid message format")    # TODO improve message for NACK reason
             return None
         
         message_str = message_str[1:-1] # Remove the < and >
@@ -819,10 +842,15 @@ def error_code(code, extra=None):
     else:
         error("ERROR_CODE", code)
 
+def get_err_str(exception):
+    buf = io.StringIO()
+    sys.print_exception(exception, buf)
+    return buf.getvalue()
+
 def error_exception(exception):
     buf = io.StringIO()
     sys.print_exception(exception, buf)
-    exception_str = buf.getvalue()
+    exception_str = get_err_str(exception)
     print("EXCEPTION:", exception_str)
     error("EXCEPTION", exception_str.splitlines())
 
