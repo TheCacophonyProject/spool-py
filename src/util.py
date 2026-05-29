@@ -530,26 +530,37 @@ class RPi_UART:
                     src = parts[0]
                     dst = parts[1]
                     bin_src = src + ".bin"
-                    # Decode base64 line by line to avoid holding all data in memory at once
-                    with open(src, "rb") as f_in, open(bin_src, "wb") as f_out:
-                        for line in f_in:
-                            line = line.strip()
-                            if line:
-                                f_out.write(binascii.a2b_base64(line))
-                    os.remove(src)
-                    # Stream decompress directly to the destination
-                    with open(bin_src, "rb") as f_in, open(dst, "wb") as f_out:
-                        try:
-                            with deflate.DeflateIO(f_in, deflate.RAW, 13) as d:
-                                while True:
-                                    chunk = d.read(256)
-                                    if not chunk:
-                                        break
-                                    f_out.write(chunk)
-                        except EOFError:
-                            pass
-                    os.remove(bin_src)
-                    self.send_ack(message.id)
+                    try:
+                        # Decode base64 line by line to avoid holding all data in memory at once
+                        with open(src, "rb") as f_in, open(bin_src, "wb") as f_out:
+                            for line in f_in:
+                                line = line.strip()
+                                if line:
+                                    f_out.write(binascii.a2b_base64(line))
+                        # Stream decompress directly to the destination
+                        with open(bin_src, "rb") as f_in, open(dst, "wb") as f_out:
+                            try:
+                                with deflate.DeflateIO(f_in, deflate.RAW, 8) as d:
+                                    while True:
+                                        chunk = d.read(256)
+                                        if not chunk:
+                                            break
+                                        f_out.write(chunk)
+                            except EOFError:
+                                pass
+                        # Only remove temp files after successful decompression
+                        os.remove(src)
+                        os.remove(bin_src)
+                        self.send_ack(message.id)
+                    except Exception as e:
+                        print("DECOMPRESS failed:", e)
+                        # Remove partial output and binary temp, but keep src so the retry can reuse it
+                        for path in [bin_src, dst]:
+                            try:
+                                os.remove(path)
+                            except:
+                                pass
+                        self.send_nack(message.id)
 
                 elif message.type == "MV":
                     parts = message.payload.split(",")
