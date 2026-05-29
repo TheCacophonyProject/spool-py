@@ -1,20 +1,6 @@
 from util import *
 import time
 
-# TODO: These are the different types of messages that can be sent and how they will be processed.
-
-#       - writeConfig - Payload is a json file of the configuration.
-#       - deleteFile - Payload is the file to be deleted.
-#       - writeLines - Payload is a JSON with {file: "filename", lines: ["line1", "line2", ...]}
-#       - writeRTC - Payload is a JSON with the new time {year: 2023, month: 1, day: 1, hour: 0, minute: 0, second: 0}
-#       - readRTC - Returns the current time as a JSON
-#       - ls - Returns a JSON with all the files on the trap and there hashes.
-#       - readFile - Payload is a JSON with {file: "filename", lineOffset: 0, lineCount: 10} Response is the lines of the file, including the lineIndex of the last line read.
-#       - sensors - Returns a JSON with all the sensors and there values.
-#       - spoolRelease - Triggers the spools to release.
-#       - spoolReset - Runs the spool reset sequence.
-#       - spoolState - Returns the state of the spool.
-
 pirs = PIRs()
 uart = RPi_UART()
 spool = Spool()

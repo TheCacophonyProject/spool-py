@@ -427,7 +427,9 @@ class PIRs:
         self.i2c.writeto(0x3E, bytes([0, value]))
 
 class RPi_UART:
-    def __init__(self, shared_dict):
+    # TODO: Add shared I2C object
+
+    def __init__(self, shared_dict, i2c = None):
         self.shared_dict = shared_dict
         self._running = True
         self.uart = UART(0, baudrate=9600, tx=Pin(PIN_UART_TX), rx=Pin(PIN_UART_RX))
@@ -439,63 +441,112 @@ class RPi_UART:
 
     def _uart_loop(self):
         while self._running:
-            # Get a new message
-            message = self.check_for_message()
+            try:
+                # Get a new message
+                message = self.check_for_message()
 
-            # Ignore if no message
-            if message is None:
-                continue
+                # Ignore if no message
+                if message is None:
+                    continue
 
-            print(f"Received {message.type} message")
+                print(f"Received {message.type} message")
 
-            # Process the message
-            if message.type == "ACK":
-                # TODO figure out what we want to do in this situation.
-                continue
-            
-            elif message.type == "NACK":
-                # TODO figure out what we want to do in this situation.
-                continue
+                # Process the message
+                if message.type == "ACK":
+                    # TODO figure out what we want to do in this situation.
+                    continue
+                
+                elif message.type == "NACK":
+                    # TODO figure out what we want to do in this situation.
+                    continue
 
-            elif message.type == "ENABLE":
-                # We will write to the shared dict to set enable to true.
-                if self.shared_dict.set("enable", True):
+                elif message.type == "ENABLE":
+                    # We will write to the shared dict to set enable to true.
+                    if self.shared_dict.set("enable", True):
+                        self.send_ack(message.id)
+                    else:
+                        self.send_bad_key(message.id)
+
+                elif message.type == "DISABLE":
+                    # We will write to the shared dict to set enable to false.
+                    if self.shared_dict.set("enable", False):
+                        self.send_ack(message.id)
+                    else:
+                        self.send_bad_key(message.id)
+
+                elif message.type == "RESTART":
+                    print("Restarting...")
                     self.send_ack(message.id)
-                else:
-                    self.send_bad_key(message.id)
+                    time.sleep(1)
+                    reset()
 
-            elif message.type == "DISABLE":
-                # We will write to the shared dict to set enable to false.
-                if self.shared_dict.set("enable", False):
+                elif message.type == "LS":
+                    # TODO: Only get wanted files
+                    if message.payload == "":
+                        all_files = get_file_hashes()
+                        payload = json.dumps(all_files)
+                        print(payload)
+                        self.send_message(Message(message.id, "LS", payload))
+                        continue
+
+                    files = get_file_hashes(target_files=message.payload.split(","))
+                    payload = json.dumps(files)
+                    print(payload)
+                    self.send_message(Message(message.id, "LS", payload))
+
+                # TODO: Read RTC time () -> (time)
+                # Require shared I2C
+
+                # TODO: Write RTC time (time) -> ACK
+                # Require shared I2C
+
+                elif message.type == "READ":
+                    parts = message.payload.split(",")
+                    filename = parts[0]
+                    offset = int(parts[1])
+                    count = int(parts[2])
+                    lines = read_file(filename, offset, count)
+                    self.send_message(Message(message.id, "READ", json.dumps(lines)))
+
+                elif message.type == "WRITE":
+                    # Split from first comma
+                    print(message.payload)
+                    parts = message.payload.split(",", 1)
+                    print(parts)
+                    filename = parts[0]
+                    # Convert to a list
+                    print(parts[1])
+                    lines = json.loads(parts[1])
+
+                    with open(filename, "a") as f:
+                        for line in lines:
+                            f.write(line+"\n")
                     self.send_ack(message.id)
+
+                elif message.type == "DELETE":
+                    filename = message.payload
+                    os.remove(filename)
+                    self.send_ack(message.id)
+
+                elif message.type == "MV":
+                    parts = message.payload.split(",")
+                    src = parts[0]
+                    dst = parts[1]
+                    os.rename(src, dst)
+                    self.send_ack(message.id)
+
+                # TODO: Run program (filename) -> ACK 
+
+                # TODO: Testing
+                elif message.type == "PING":
+                    self.send_ack(message.id)
+
                 else:
-                    self.send_bad_key(message.id)
+                    print("Received unknown message type: {}".format(message.type))
+                    self.send_nack(message.id)
 
-            # TODO: Testing
-            elif message.type == "RESTART":
-                print("Restarting...")
-                time.sleep(1)
-                restart()
-
-            # TODO: Testing
-            elif message.type == "LS":
-                files = {}
-                for entry in os.ilistdir("/"):
-                    name, ftype = entry[0], entry[1]
-                    if ftype == 0x8000:  # regular file
-                        h = hashlib.sha256()
-                        with open("/" + name, "rb") as f:
-                            while True:
-                                chunk = f.read(512)
-                                if not chunk:
-                                    break
-                                h.update(chunk)
-                        files[name] = binascii.hexlify(h.digest()).decode()
-                self.send_message(Message(message.id, "LS", json.dumps(files)))
-
-            else:
-                print("Received unknown message type: {}".format(message.type))
-                self.send_nack(message.id)
+            except Exception as e:
+                print(e)
 
     def check_for_message(self):
         # Check to see if there is any data in the UART buffer, if not return None
@@ -545,12 +596,16 @@ class RPi_UART:
         message = Message(id, type, payload)
         return message        
 
+    CHUNK_SIZE = 256
+
     def send_message(self, message):
         message_str = f"<{message.id}|{message.type}|{message.payload}>"
         checksum = self._compute_checksum(message_str)
         line = f"{message_str}{checksum}\n"
         print(f"Sending: {line}")
-        self.uart.write(line)
+        for i in range(0, len(line), self.CHUNK_SIZE):
+            self.uart.flush()
+            self.uart.write(line[i:i+self.CHUNK_SIZE])
 
     def _compute_checksum(self, message):
         return sum(message.encode()) % 256
@@ -787,3 +842,32 @@ def error(type, payload, rpi_uart=None):
     # Restart the system
     time.sleep(5)
     reset()
+
+def get_file_hashes(target_files=None):
+    files = {}
+    for entry in os.ilistdir("/"):
+        name, size = entry[0], entry[3]
+        if target_files and name not in target_files:
+            continue
+        h = hashlib.sha256()
+        with open("/" + name, "rb") as f:
+            while True:
+                chunk = f.read(512)
+                if not chunk:
+                    break
+                h.update(chunk)
+        files[name] = binascii.hexlify(h.digest()).decode()[:10]
+    return files
+
+def read_file(filename, offset, count):
+    with open(filename, "r") as f:
+        for _ in range(offset):
+            if not f.readline():
+                break
+        lines = []
+        for _ in range(count):
+            line = f.readline()
+            if not line:
+                break
+            lines.append(line.rstrip('\n'))
+    return lines
