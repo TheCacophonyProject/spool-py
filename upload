@@ -21,11 +21,15 @@ if [ -f "$prescript" ]; then
     echo "Finished running pre script."
 fi
 
+tmpDir=./mpy
+
+./compile-mpy
+
 echo "Clearing Pico filesystem..."
 mpremote exec "import os; [os.remove(f) for f in os.listdir() if not os.stat(f)[0] & 0x4000]"
 
-echo "Copying files from $srcPath..."
-mpremote cp "$srcPath"/* :
+echo "Copying files from $tmpDir..."
+mpremote cp "$tmpDir"/* :
 
 echo "Resetting Pico..."
 mpremote reset

@@ -22,18 +22,29 @@ if [ -z "$remote_host" ]; then
 fi
 
 scriptDir="$(cd "$(dirname "$0")" && pwd)"
+srcPath="$scriptDir/src"
 remote_tmp="/tmp/spool-upload"
-
-echo "Copying files to $remote_host..."
-ssh "$remote_host" "mkdir -p $remote_tmp/src"
-scp -r "$scriptDir/src/"* "$remote_host:$remote_tmp/src/"
-scp "$scriptDir/upload" "$remote_host:$remote_tmp/upload"
-ssh "$remote_host" "chmod +x $remote_tmp/upload"
 
 prescript="$scriptDir/pre-script.py"
 if [ -f "$prescript" ]; then
-    scp "$prescript" "$remote_host:$remote_tmp/pre-script.py"
+    echo "Running pre script."
+    python "$prescript"
+    echo "Finished running pre script."
 fi
 
-echo "Running upload on $remote_host..."
-ssh -t "$remote_host" "$remote_tmp/upload"
+tmpDir="./mpy"
+./compile-mpy
+
+echo "Copying files to $remote_host..."
+ssh "$remote_host" "rm -rf $remote_tmp"
+ssh "$remote_host" "mkdir -p $remote_tmp"
+scp -r "$tmpDir/"* "$remote_host:$remote_tmp/"
+
+echo "Clearing Pico filesystem..."
+ssh -t "$remote_host" "mpremote exec \"import os; [os.remove(f) for f in os.listdir() if not os.stat(f)[0] & 0x4000]\""
+
+echo "Copying files to Pico..."
+ssh -t "$remote_host" "mpremote cp $remote_tmp/* :"
+
+echo "Resetting Pico..."
+ssh -t "$remote_host" "mpremote reset"

@@ -1,0 +1,21 @@
+#!/bin/bash
+
+set -e
+outDir=./mpy
+srcPath=./src
+
+echo "Cleaning $outDir..."
+rm -rf $outDir
+mkdir $outDir
+
+echo "Compiling .py files to .mpy..."
+for f in "$srcPath"/*; do
+    base="$(basename "$f")"
+    if [[ "$f" == *.py && "$base" != "main.py" && "$base" != code*.py ]]; then
+        mpy-cross "$f" -o "$outDir/${base%.py}.mpy"
+    else
+        cp "$f" "$outDir/$base"
+    fi
+done
+
+echo "Finished compiling .py files to .mpy."
