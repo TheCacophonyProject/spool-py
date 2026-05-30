@@ -569,7 +569,17 @@ class RPi_UART:
                     os.rename(src, dst)
                     self.send_ack(message.id)
 
-                # TODO: Run program (filename) -> ACK 
+                elif message.type == "COMMIT":
+                    try:
+                        for f in os.listdir():
+                            if f.endswith(".tmp"):
+                                os.rename(f, f[:-4])
+                        self.send_ack(message.id)
+                    except Exception as e:
+                        print("COMMIT failed:", e)
+                        self.send_nack(message.id)
+
+                # TODO: Run program (filename) -> ACK
 
                 # TODO: Testing
                 elif message.type == "PING":
