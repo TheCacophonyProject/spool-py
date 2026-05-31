@@ -47,4 +47,4 @@ echo "Copying files to Pico..."
 ssh -t "$remote_host" "mpremote cp $remote_tmp/* :"
 
 echo "Resetting Pico..."
-ssh -t "$remote_host" "mpremote reset"
+ssh -t "$remote_host" "mpremote reset && mpremote"
