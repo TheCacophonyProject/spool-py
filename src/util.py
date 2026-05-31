@@ -502,8 +502,9 @@ class RPi_UART:
                         self.send_nack(message.id, "No shared I2C object")
                         continue
                     clock = Clock(self.i2c)
-                    time = clock.get_utc_time()
-                    self.send_message(Message(message.id, "READ_TIME_R", time))
+                    utc_time = clock.get_utc_time().isoformat()
+                    local_time = clock.get_local_time().isoformat()
+                    self.send_message(Message(message.id, "READ_TIME_R", {"UTC": utc_time, "Local": local_time}))
 
                 elif message.type == "WRITE_TIME":
                     if self.i2c is None:
