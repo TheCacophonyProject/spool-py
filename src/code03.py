@@ -7,8 +7,9 @@
 from util import *
 from user_config import *
 
+
 shared_dict = SharedDict()
-rpi_uart = RPi_UART(shared_dict)
+rpi_uart = RPi_UART(shared_dict, i2c=i2c)
 shared_dict.set("enable", False, new_key=True)
 spool = Spool(rpi_uart=rpi_uart)
 pirs = PIRs()

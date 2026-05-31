@@ -242,7 +242,6 @@ class Spool:
             if avg.avg() > MAX_CURRENT:
                 self.stop()
                 print("Finished move. Reason: Over current")
-                # TODO, work out how we will handle this case
                 error_code(ERROR_OVER_CURRENT)
                 self.ina219.sleep()
                 return False
@@ -435,7 +434,9 @@ class RPi_UART:
         self.shared_dict = shared_dict
         self._running = True
         self.uart = UART(0, baudrate=9600, tx=Pin(PIN_UART_TX), rx=Pin(PIN_UART_RX))
+        self.i2c = i2c
         _thread.start_new_thread(self._uart_loop, ())
+        
 
     def close(self):
         self._running = False
@@ -496,11 +497,34 @@ class RPi_UART:
                     print(payload)
                     self.send_message(Message(message.id, "LS", payload))
 
-                # TODO: Read RTC time () -> (time)
-                # Require shared I2C
+                elif message.type == "READ_TIME":
+                    if self.i2c is None:
+                        self.send_nack(message.id, "No shared I2C object")
+                        continue
+                    clock = Clock(self.i2c)
+                    time = clock.get_utc_time()
+                    self.send_message(Message(message.id, "READ_TIME_R", time))
 
-                # TODO: Write RTC time (time) -> ACK
-                # Require shared I2C
+                elif message.type == "WRITE_TIME":
+                    if self.i2c is None:
+                        self.send_nack(message.id, "No shared I2C object")
+                        continue
+                    clock = Clock(self.i2c)
+                    try: 
+                        dt = datetime.datetime.fromisoformat(message.payload)
+                        print(dt.isoformat())
+                        clock.write_time(
+                            year= dt.year%1000,
+                            month= dt.month,
+                            date= dt.day,
+                            hours= dt.hour,
+                            minutes= dt.minute,
+                            seconds= dt.second
+                        )
+                        self.send_ack(message.id)
+                    except Exception as e:
+                        print(get_err_str(e))
+                        self.send_nack(message.id, "Invalid time format")
 
                 elif message.type == "READ":
                     parts = message.payload.split(",")
@@ -606,11 +630,17 @@ class RPi_UART:
                 if char == b"\n":
                     break
                 line_raw.extend(char)
-        
-        line = line_raw.decode('utf-8')
+        try:
+            line = line_raw.decode('utf-8')
+        except:
+            self.send_nack(payload="Failed to decode line")
+            return None
         
         # Split from the last '>' to get the message and the checksum
         last_index = line.rfind('>')
+        if last_index < 0:
+            self.send_nack(payload="Invalid message format")
+            return None
         message_str = line[:last_index+1]
         checksum = line[last_index+1:]
         
@@ -628,7 +658,7 @@ class RPi_UART:
         # Check that we get the message in the correct format "<id|type|payload>"
         if not message_str.startswith('<') or message_str.count('|') < 2 or not message_str.endswith('>'):
             print(f"Invalid message format {message_str}")
-            self.send_nack("Invalid message format")    # TODO improve message for NACK reason
+            self.send_nack("Invalid message format")
             return None
         
         message_str = message_str[1:-1] # Remove the < and >
