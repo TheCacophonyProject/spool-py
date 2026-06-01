@@ -1,0 +1,34 @@
+name: Compile and upload mpy
+
+on:
+  release:
+    types: [created]
+  workflow_dispatch:
+
+env:
+  MPY_VERSION: '1.28.0rc0.post2'
+
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Compile
+        run: ./compile-mpy --mpy-version ${{ env.MPY_VERSION }}
+
+      - name: Package
+        run: zip -r "spool-mpy-${{ env.MPY_VERSION }}.zip" mpy/
+
+      - name: Upload to release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: spool-mpy-*.zip
