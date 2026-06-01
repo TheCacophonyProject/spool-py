@@ -4,9 +4,9 @@ import time
 from util import Spool
 from user_config import *
 
-i2c = I2C(id=0, scl=Pin(PIN_SCL), sda=Pin(PIN_SDA))
-
-spool = Spool(i2c)
+shared_dict = SharedDict()
+rpi_uart = RPi_UART(shared_dict, i2c=i2c)
+spool = Spool(rpi_uart=rpi_uart)
 
 loop_time_seconds = 60 * 3
 

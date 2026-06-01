@@ -4,7 +4,9 @@ import time
 from util import Spool, APIR, Clock
 from machine import Pin
 
-spool = Spool()
+shared_dict = SharedDict()
+rpi_uart = RPi_UART(shared_dict, i2c=i2c)
+spool = Spool(rpi_uart=rpi_uart)
 apir = APIR()
 clock = Clock()
 

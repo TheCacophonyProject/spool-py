@@ -27,14 +27,13 @@ sw_or = "or"
 i2c = I2C(id=0, scl=Pin(PIN_SCL), sda=Pin(PIN_SDA))
 
 class Spool:
-    def __init__(self, i2c=i2c, rpi_uart=None):
+    def __init__(self, rpi_uart=None):
         # H-Bridge driver pins, set frequency and set to 0
         self.h_in1 = PWM(Pin(PIN_H_IN_1), freq=20000)
         self.h_in1.duty_u16(0)
         self.h_in2 = PWM(Pin(PIN_H_IN_2), freq=20000)
         self.h_in2.duty_u16(0)
         self.direction = "stop"
-        self.clock = Clock(i2c)
         self.rpi_uart = rpi_uart
         self.spool_reset_pin = Pin(PIN_SPOOL_RESET, Pin.IN, Pin.PULL_UP)
 
