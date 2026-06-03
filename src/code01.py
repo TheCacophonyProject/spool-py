@@ -6,13 +6,13 @@ from user_config import *
 shared_dict = SharedDict()
 rpi_uart = RPi_UART(shared_dict, i2c=i2c)
 spool = Spool(rpi_uart=rpi_uart)
-pirs = PIRs()
+apir = APIR()
 clock = Clock()
 switches = Switches()
 
 # Motion from the PIRs
 def motion_check():
-    return not pirs.read() == 0
+    return apir.motion()
 
 # Enable checks for spool, clock and switches
 enabled_checks = [

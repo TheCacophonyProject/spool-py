@@ -1,9 +1,9 @@
 # Threshold for triggering the Analog PIR sensors
-APIR_DISPLACEMENT_THRESHOLD = 0.5
-APIR_GRADIENT_THRESHOLD = 600
+APIR_DISPLACEMENT_THRESHOLD = 0.3
+APIR_GRADIENT_THRESHOLD = 450
 
 # Max current in mA for the spool reset motor.
-MAX_CURRENT = 1600
+MAX_CURRENT = 1000
 
 # After the spool has triggered it will wait this long before resetting the spool.
 SPOOL_RESET_DELAY_MINUTES = 10
@@ -47,4 +47,4 @@ POST_RESET_COOLDOWN_SECONDS = 20
 
 
 # This should be set to true if there is a reed sensor wired up to detect if the spool is in the reset position.
-SPOOL_REED_CHECK = True
+SPOOL_REED_CHECK = False

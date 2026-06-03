@@ -758,7 +758,7 @@ class APIR():
     def motion(self):
         # Prevent updating too frequently, 0.5ms
         if time.time_ns() - self.last_time < 1_000_000:
-            return
+            return self.displacement_triggered or self.gradient_triggered
 
         new_value = self.AnalogPin.read_u16()
         # print(new_value)

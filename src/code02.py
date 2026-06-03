@@ -5,7 +5,7 @@ from util import *
 from user_config import *
 
 spool = Spool()
-pirs = PIRs()
+apir = APIR()
 clock = Clock()
 switches = Switches()
 
@@ -14,7 +14,7 @@ rx_pin = Pin(PIN_UART_RX, Pin.IN, Pin.PULL_DOWN)
 
 # Motion from the PIRs
 def motion_check():
-    return not pirs.read() == 0
+    return apir.motion()
 
 def pin_enable_check():
     if rx_pin.value() == 1:
