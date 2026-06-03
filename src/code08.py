@@ -10,19 +10,19 @@ spool = Spool(rpi_uart=rpi_uart)
 
 loop_time_seconds = 60 * 3
 
+print("Resetting")
+spool.reset_sequence()
+time.sleep(2)
+
 while True:
     start_time = time.time() # Get start time in seconds
-
-    print("Resetting")
-    spool.reset_sequence()
-    time.sleep(2)
 
     print("Releasing.")
     spool.release()
     time.sleep(2)
 
-    print("Moving to home position.")
-    spool.move_to_home()
+    print("Resetting")
+    spool.reset_sequence()
     time.sleep(2)
 
     elapsed_time = time.time() - start_time
