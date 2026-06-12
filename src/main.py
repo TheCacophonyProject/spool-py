@@ -61,6 +61,11 @@ if True:
 n = rotary_encoder.position()
 print("At position " + str(n))
 
+if n == 0:
+    user_config = UserConfig()
+    n = user_config.program
+    print("Position 0: using program from config: " + str(n))
+
 sleep(1)
 for i in range(3):
     buzzer.on()

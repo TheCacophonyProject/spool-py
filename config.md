@@ -51,3 +51,7 @@ Seconds to wait after the spool resets before running trap checks. The reset mot
 ## `spool_reed_check`
 
 Set to `true` if a reed sensor is wired up to detect when the spool is in the reset position. Default: `false`
+
+## `program`
+
+If the program select swithc is set to 0, the trap will instead run this program.

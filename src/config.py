@@ -77,6 +77,7 @@ class UserConfig():
         self.motion_message_gap = 10
         self.post_reset_cooldown_seconds = 20
         self.spool_reed_check = False
+        self.program = 1
 
         self._load_user_config()
 
