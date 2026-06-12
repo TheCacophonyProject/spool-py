@@ -3,7 +3,6 @@ import timezone
 import datetime
 from machine import I2C, UART, Pin, PWM, ADC, reset
 from config import *
-from user_config import *
 import time
 import _thread
 import io
@@ -23,6 +22,8 @@ sw_open = "open"
 sw_closed = "closed"
 sw_and = "and"
 sw_or = "or"
+
+user_config = UserConfig()
 
 i2c = I2C(id=0, scl=Pin(PIN_SCL), sda=Pin(PIN_SDA))
 
@@ -120,7 +121,7 @@ class Spool:
         time.sleep(0.5)
 
         # Check if the spool is already reset.
-        if SPOOL_REED_CHECK and self.spool_is_reset():
+        if user_config.spool_reed_check and self.spool_is_reset():
             print("Spool already reset")
             return
 
@@ -149,7 +150,7 @@ class Spool:
             self.at_home, # Check if it has got to the target
             self.home_to_reset_duration+5, # Give it 5 more seconds than expected in case it is a bit slow for some reason
             True, # Error if it takes longer than expected
-            reed_check=SPOOL_REED_CHECK) # Check reed switch if configured to do so.
+            reed_check=user_config.spool_reed_check) # Check reed switch if configured to do so.
 
         # Make event that the trap has been released
         if self.rpi_uart is not None:
@@ -186,7 +187,7 @@ class Spool:
         if self.rpi_uart is not None:
             self.rpi_uart.send_message(Message(0, "TRIGGERED"))
 
-        if SPOOL_REED_CHECK and self.spool_is_reset():
+        if user_config.spool_reed_check and self.spool_is_reset():
             # The reset reed should not read it as still being reset
             error_code(ERROR_SPOOL_NOT_RELEASING)
 
@@ -238,7 +239,7 @@ class Spool:
                     max_avg_current = avg_current
             except Exception as e:
                 print("ina error", e)
-            if avg.avg() > MAX_CURRENT:
+            if avg.avg() > user_config.max_current:
                 self.stop()
                 print("Finished move. Reason: Over current")
                 error_code(ERROR_OVER_CURRENT)
@@ -250,9 +251,9 @@ class Switches:
         # Init switches. The switches when closed will connect them to ground. So we set them up with PULL_UP
         self.sw1 = Pin(PIN_SW_1, Pin.IN, Pin.PULL_UP)
         self.sw2 = Pin(PIN_SW_2, Pin.IN, Pin.PULL_UP)
-        self.sw1_disable_when = SWITCH1_DISABLE.lower()
-        self.sw2_disable_when = SWITCH2_DISABLE.lower()
-        self.sw_logic = SWITCH_LOGIC.lower()
+        self.sw1_disable_when = user_config.switch_1_disable.lower()
+        self.sw2_disable_when = user_config.switch_2_disable.lower()
+        self.sw_logic = user_config.switch_logic.lower()
         # Check valid configuration.
         if self.sw1_disable_when not in [sw_closed, sw_open, sw_ignore]:
             raise ValueError("SWITCH1_DISABLE must be either 'OPEN', 'CLOSED', or 'IGNORE'")
@@ -354,8 +355,8 @@ class RotaryEncoder:
 class Clock:
     def __init__(self, i2c=i2c):
         self.r = pcf8563.PCF8563(i2c)
-        self.latitude = LATITUDE
-        self.longitude = LONGITUDE
+        self.latitude = user_config.latitude
+        self.longitude = user_config.longitude
         dst = timezone.time_change_rule(-1, 6, 9, 2, 780)
         st = timezone.time_change_rule(0, 6, 4, 2, 720)
         self.nz_tz = timezone.timezone(dst, st)
@@ -384,8 +385,8 @@ class Clock:
         utc = self.get_utc_time()
         local_time = self.get_local_time(utc)
         tz = self.nz_tz.get_current_tz(utc).timezone
-        sunrise = timezone.get_sunrise(utc, LATITUDE, LONGITUDE, tz)
-        sunset = timezone.get_sunset(utc, LATITUDE, LONGITUDE, tz)
+        sunrise = timezone.get_sunrise(utc, user_config.latitude, user_config.longitude, tz)
+        sunset = timezone.get_sunset(utc, user_config.latitude, user_config.longitude, tz)
         return local_time.time() < sunrise or sunset < local_time.time()
 
     def in_active_window(self):
@@ -748,8 +749,8 @@ class APIR():
         self.min = 0
         self.max = 43_000
         self.avg = (self.min + self.max)/2
-        self.displacement_threshold = (self.max - self.min)/2*APIR_DISPLACEMENT_THRESHOLD # 50%
-        self.gradient_threshold = APIR_GRADIENT_THRESHOLD # 600
+        self.displacement_threshold = (self.max - self.min)/2*user_config.apir_d_threshold # 50%
+        self.gradient_threshold = user_config.apir_dt_threshold
         self.previous_value = self.AnalogPin.read_u16()
         self.last_time = time.time_ns()
         self.displacement_triggered = False
@@ -811,12 +812,12 @@ def run_sequence(
         # Step 1: Reset spool
         print("Resetting spool.")
         spool.reset_sequence()
-        print(f"Waiting {POST_RESET_COOLDOWN_SECONDS}s until running trap checks.")
-        time.sleep(POST_RESET_COOLDOWN_SECONDS)
+        print(f"Waiting {user_config.post_reset_cooldown_seconds}s until running trap checks.")
+        time.sleep(user_config.post_reset_cooldown_seconds)
 
         # Step 2: Wait for motion check and all enable checks to pass.
         print("Waiting for motion check and all enable checks to pass.")
-        last_motion_message = -MOTION_MESSAGE_GAP
+        last_motion_message = -user_config.motion_message_gap
         old_enabled = None  # Track previous enabled state so we can log changes.
         old_state = None
         old_failed_check_reasons = None
@@ -826,7 +827,7 @@ def run_sequence(
 
             # Send a motion message if one hasn't been sent recently.
             now = time.time()
-            if motion and last_motion_message + MOTION_MESSAGE_GAP < now:
+            if motion and last_motion_message + user_config.motion_message_gap < now:
                 if rpi_uart:
                     rpi_uart.send_message(motion_message())
                 last_motion_message = now
@@ -865,8 +866,8 @@ def run_sequence(
         spool.release()
 
         # Step 4: Wait for SPOOL_RESET_DELAY_MINUTES
-        print(f"Waiting {SPOOL_RESET_DELAY_MINUTES} minutes until resetting.")
-        time.sleep(SPOOL_RESET_DELAY_MINUTES * 60)
+        print(f"Waiting {user_config.spool_reset_delay_minutes} minutes until resetting.")
+        time.sleep(user_config.spool_reset_delay_minutes * 60)
 
         # Step 5: Back to step 1, resetting the spool
 

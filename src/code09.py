@@ -1,15 +1,14 @@
 # Program 8 will run through a reset, home, trigger, home cycle.
 
 import time
-from util import Spool
-from user_config import *
+from util import Spool, user_config
 
 shared_dict = SharedDict()
 rpi_uart = RPi_UART(shared_dict, i2c=i2c)
 spool = Spool(rpi_uart=rpi_uart)
 
 # It will go through the loop every `loop_time_seconds` amount of seconds. So 120 means 30 loops a hour
-loop_time_seconds = 60 * TEST_LOOP_INTERVAL
+loop_time_seconds = 60 * user_config.test_loop_interval
 
 print("Resetting")
 spool.reset_sequence()

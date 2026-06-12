@@ -33,9 +33,21 @@ echo "Cleaning $outDir..."
 rm -rf $outDir
 mkdir $outDir
 
+excludeFiles=("config.json" "upload_time.py")
+
 echo "Compiling .py files to .mpy..."
 for f in "$srcPath"/*; do
     base="$(basename "$f")"
+    skip=false
+    for excluded in "${excludeFiles[@]}"; do
+        if [[ "$base" == "$excluded" ]]; then
+            skip=true
+            break
+        fi
+    done
+    if $skip; then
+        continue
+    fi
     if [[ "$f" == *.py && "$base" != "main.py" && "$base" != code*.py ]]; then
         mpy-cross "$f" -o "$outDir/${base%.py}.mpy"
     else

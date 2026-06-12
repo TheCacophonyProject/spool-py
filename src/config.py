@@ -60,3 +60,33 @@ PIN_LED_2 = 8   # thermal trigger
 
 # This is used so when resetting the first time it knows how long each "step" should be.
 HOME_TO_RESET_DURATION = 13
+
+class UserConfig():
+    def __init__(self):
+        self.apir_d_threshold = 0.3
+        self.apir_dt_threshold = 450
+        self.max_current = 1000
+        self.spool_reset_delay_minutes = 10
+        self.latitude = -43.532055
+        self.longitude = 172.636230
+        self.test_loop_interval = 180
+        self.switch_1_disable = "IGNORE"
+        self.switch_2_disable = "IGNORE"
+        self.switch_logic = "OR"
+        self.observation_mode = False
+        self.motion_message_gap = 10
+        self.post_reset_cooldown_seconds = 20
+        self.spool_reed_check = False
+
+        self._load_user_config()
+
+    def _load_user_config(self):
+        try:
+            import json
+            with open("config.json") as f:
+                user_cfg = json.load(f)
+            for key, value in user_cfg.items():
+                if hasattr(self, key):
+                    setattr(self, key, value)
+        except (OSError, ValueError):
+            pass
