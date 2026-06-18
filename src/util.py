@@ -51,6 +51,11 @@ class Spool:
         # First guess for reset duration.
         self.home_to_reset_duration = HOME_TO_RESET_DURATION
 
+        # _at_home is set to True when the spool reaches home and will only be unset when the spool is moved away from home.
+        # This is to prevent slight movement in the spool making the photo interrupter think it is not at home anymore, preventing 
+        # the trap from triggering.
+        self._at_home = False
+
         # Current sensor
         self.ina219 = INA219(SHUNT_OHMS, i2c)
         self.ina219.configure(gain = INA219.GAIN_8_320MV)
@@ -75,6 +80,7 @@ class Spool:
 
     # _drive_cw is towards reset
     def _drive_cw(self, speed=100):
+        self._at_home = False
         if self.at_reset():
             self.stop()
             return
@@ -89,6 +95,7 @@ class Spool:
 
     # _drive_ccw is towards home
     def _drive_ccw(self, speed=100):
+        self._at_home = False
         if self.at_home():
             self.stop()
             return
@@ -102,7 +109,11 @@ class Spool:
         self.direction = "ccw"
 
     def at_home(self):
-        return self.photo_interrupter_home.value() == 1
+        if self._at_home:
+            return True
+        if self.photo_interrupter_home.value() == 1:
+            self._at_home = True
+        return self._at_home
 
     def at_reset(self):
         return self.photo_interrupter_reset.value() == 1
