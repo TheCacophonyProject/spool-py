@@ -50,8 +50,8 @@ PIN_SPOOL_RESET = 6
 
 # Servo pins
 PIN_EN_6V = 18
-PIN_SERVO_1 = 19
-PIN_SERVO_2 = 20
+PIN_SERVO_1 = 19  # With a cage fitted: the cage door the spool opens onto
+PIN_SERVO_2 = 20  # With a cage fitted: the cage door out to the kill mechanism
 
 # Extra GPIO pin
 PIN_GPIO_EXTRA = 23
@@ -75,6 +75,14 @@ ERROR_OVER_CURRENT = 7
 ERROR_RUNTIME_ERROR = 8
 ERROR_SPOOL_NOT_RELEASING = 9
 
+# How long an ENABLE from the camera lasts if it doesn't say. The camera keeps sending ENABLE
+# while it wants the trap enabled, so the trap disables itself if the camera powers off or
+# is unplugged.
+DEFAULT_ENABLE_SECONDS = 300
+
+# How often the UART thread checks whether to send the camera a STATUS_CHANGED.
+STATUS_PUSH_MS = 100
+
 # This is used so when resetting the first time it knows how long each "step" should be.
 HOME_TO_RESET_DURATION = 13
 
@@ -95,6 +103,10 @@ class UserConfig():
         self.post_reset_cooldown_seconds = 1
         self.spool_reed_check = False
         self.manual_mode_timeout_minutes = 30
+        self.cage_doors = 0
+        self.cage_entry_timeout_minutes = 60
+        self.cage_hold_hours = 24
+        self.cage_exit_wait_hours = 24
         self.program = 1
 
         self._load_user_config()

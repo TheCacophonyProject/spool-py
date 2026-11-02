@@ -38,7 +38,7 @@ Must be one of `"AND"` or `"OR"`. If `"OR"` then the trap will be disabled if ei
 
 ## `observation_mode`
 
-In Observation Mode the trap resets at boot but does not trigger. If in a mode that reports events, it will send a `"dry-trigger"` event instead of `"triggered"`. Useful for testing AI trigger accuracy without disturbing animals. Default: `false`
+In Observation Mode the trap resets the spool when it starts but never releases it. When it would have triggered, a program that uses the UART sends `DRY_TRIGGERED` instead of `TRIGGERED`, then waits `spool_reset_delay_minutes` (with or without a cage), so it reports about as often as the real trap would trigger. The spool doesn't move again and the cage sequence doesn't run. A manual `RELEASE_SPOOL` over UART still releases the spool, and the test programs (such as program 8) ignore this setting. Useful for testing AI trigger accuracy without disturbing animals. Default: `false`
 
 ## `motion_message_gap`
 
@@ -50,7 +50,7 @@ Seconds to wait after the spool resets before running trap checks. The reset mot
 
 ## `spool_reed_check`
 
-Set to `true` if a reed sensor is wired up to detect when the spool is in the reset position. Default: `false`
+Set to `true` if a reed sensor is wired up to detect when the spool is in the reset position. If the reed switch shows the spool didn't stay reset, the trap sends a `SPOOL_RESET_FAILED` message to the camera (a `trapSpoolResetFailed` event) and stops there without trying again, until it is asked to reset the spool or is restarted. Default: `false`
 
 ## `manual_mode_timeout_minutes`
 
@@ -58,6 +58,39 @@ When a request to release or reset the spool comes in over UART the trap stops r
 sequence and goes into manual mode, where it only does what it is asked to. If no request is
 made for this long it restarts itself and carries on with its sequence, so a trap is not left
 disarmed. Set to `0` to stay in manual mode until the trap is restarted. Default: `30`
+
+## `cage_doors`
+
+Whether a holding cage is fitted to the spool, and how many doors it has:
+
+- `0`: no cage.
+- `1`: a cage with only door 1, the door the spool opens onto (servo 1). A held animal can only be released: `CAGE_KILL` and `CAGE_KILLED` get a NACK, and servo 2 isn't used by the cage.
+- `2`: a cage with door 1 and door 2, the door out to the kill mechanism (servo 2). A held animal can be released or killed.
+
+The external PIR watches the inside of the cage. Each door has a reed switch that closes when the door is open: SW1 for door 1 and SW2 for door 2. The trap arms the cage when it starts, and again before each spool reset, by shutting door 2 (if there is one) if SW2 shows it is open, and opening door 1 if SW1 shows it isn't. A door already in place isn't moved. Once the spool triggers it waits for the external PIR to see the animal in the cage, shuts door 1 behind it, and waits to be told what to do over UART:
+
+- `CAGE_HOLD`: hold the animal for another `cage_hold_hours`.
+- `CAGE_RELEASE`: open door 1 so the animal can get out back through the spool, which is still released. This also happens if no command comes in for `cage_hold_hours`.
+- `CAGE_KILL` (2 doors only): open door 2 so the animal goes through to the kill mechanism.
+
+With a door open it then waits up to `cage_exit_wait_hours` for the animal to go:
+
+- `CAGE_WAIT`: wait another `cage_exit_wait_hours`.
+- `CAGE_ESCAPED` / `CAGE_KILLED` (2 doors only): the animal has gone.
+
+After that, or if nothing went into the cage, the cage is armed again and the spool reset. Nothing is saved, so if the trap restarts it forgets anything it was holding and arming the cage lets the animal out. A command sent when it doesn't apply (for example `CAGE_WAIT` while holding) gets a NACK saying why. Default: `0`
+
+## `cage_entry_timeout_minutes`
+
+After the spool triggers, how long to wait for the external PIR to see an animal in the cage before giving up and resetting the spool. Default: `60`
+
+## `cage_hold_hours`
+
+How long an animal is held in the cage before it is released, and how long a `CAGE_HOLD` extends that by (from when the command arrives). Default: `24`
+
+## `cage_exit_wait_hours`
+
+After a release or kill, how long to wait for the animal to leave the cage before carrying on, and how long a `CAGE_WAIT` extends that by. Default: `24`
 
 ## `program`
 
